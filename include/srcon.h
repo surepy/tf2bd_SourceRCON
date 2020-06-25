@@ -26,7 +26,7 @@ namespace srcon
 		std::string pass;
 	};
 
-	class client
+	class client final
 	{
 		const srcon_addr addr;
 		const int sockfd;
@@ -36,7 +36,7 @@ namespace srcon
 	public:
 		client(const srcon_addr addr, const int timeout = SRCON_DEFAULT_TIMEOUT);
 		client(const std::string address, const int port, const std::string password, const int timeout = SRCON_DEFAULT_TIMEOUT);
-		virtual ~client();
+		~client();
 
 		std::string send(const std::string_view& message, PacketType type = PacketType::SERVERDATA_EXECCOMMAND);
 
