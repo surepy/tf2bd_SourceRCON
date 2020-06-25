@@ -70,10 +70,10 @@ srcon::client::client(const srcon_addr addr, const int timeout) :
 	LOG("Connection established!");
 	connected = true;
 
-	send(addr.pass, SERVERDATA_AUTH);
+	send(addr.pass, PacketType::SERVERDATA_AUTH);
 	char buffer[SRCON_HEADER_SIZE];
-	::recv(sockfd, buffer, SRCON_HEADER_SIZE, SERVERDATA_RESPONSE_VALUE);
-	::recv(sockfd, buffer, SRCON_HEADER_SIZE, SERVERDATA_RESPONSE_VALUE);
+	::recv(sockfd, buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
+	::recv(sockfd, buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
 }
 
 srcon::client::~client()
@@ -135,7 +135,7 @@ bool srcon::client::connect(const int timeout) const
 	return status != 0;
 }
 
-std::string srcon::client::send(const std::string_view& data, const int type)
+std::string srcon::client::send(const std::string_view& data, const PacketType type)
 {
 	LOG("Sending: " << data);
 	if (!get_connected())
@@ -148,11 +148,11 @@ std::string srcon::client::send(const std::string_view& data, const int type)
 	if (::send(sockfd, packet.get(), packet_len, 0) < 0)
 		return "Sending failed!";
 
-	if (type != SERVERDATA_EXECCOMMAND)
+	if (type != PacketType::SERVERDATA_EXECCOMMAND)
 		return "";
 
 	unsigned long halt_id = id;
-	send("", SERVERDATA_RESPONSE_VALUE);
+	send("", PacketType::SERVERDATA_RESPONSE_VALUE);
 	return recv(halt_id);
 }
 
@@ -209,13 +209,13 @@ size_t srcon::client::read_packet_len() const
 	return len;
 }
 
-void srcon::client::pack(char packet[], const std::string_view& data, int packet_len, int id, int type) const
+void srcon::client::pack(char packet[], const std::string_view& data, int packet_len, int id, PacketType type) const
 {
 	int data_len = packet_len - SRCON_HEADER_SIZE;
 	std::memset(packet, 0, packet_len);
 	packet[0] = data_len + 10;
 	packet[4] = id;
-	packet[8] = type;
+	packet[8] = int(type);
 	for (int i = 0; i < data_len; i++)
 		packet[12 + i] = data[i];
 }

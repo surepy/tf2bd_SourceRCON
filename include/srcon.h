@@ -6,10 +6,13 @@
 
 namespace srcon
 {
-	static constexpr int SERVERDATA_AUTH = 3;
-	static constexpr int SERVERDATA_EXECCOMMAND = 2;
-	static constexpr int SERVERDATA_AUTH_RESPONSE = 2;
-	static constexpr int SERVERDATA_RESPONSE_VALUE = 0;
+	enum class PacketType
+	{
+		SERVERDATA_AUTH = 3,
+		SERVERDATA_EXECCOMMAND = 2,
+		SERVERDATA_AUTH_RESPONSE = 2,
+		SERVERDATA_RESPONSE_VALUE = 0,
+	};
 
 	static constexpr int SRCON_DEFAULT_TIMEOUT = 4;
 	static constexpr int SRCON_HEADER_SIZE = 14;
@@ -35,7 +38,7 @@ namespace srcon
 		client(const std::string address, const int port, const std::string password, const int timeout = SRCON_DEFAULT_TIMEOUT);
 		virtual ~client();
 
-		std::string send(const std::string_view& message, int type = SERVERDATA_EXECCOMMAND);
+		std::string send(const std::string_view& message, PacketType type = PacketType::SERVERDATA_EXECCOMMAND);
 
 		inline bool get_connected() const
 		{
@@ -56,7 +59,7 @@ namespace srcon
 		bool connect(int timeout = SRCON_DEFAULT_TIMEOUT) const;
 		std::string recv(unsigned long) const;
 		size_t read_packet_len() const;
-		void pack(char packet[], const std::string_view& data, int packet_len, int id, int type) const;
+		void pack(char packet[], const std::string_view& data, int packet_len, int id, PacketType type) const;
 		std::unique_ptr<char[]> read_packet(unsigned int&, bool&) const;
 		size_t byte32_to_int(const char*) const;
 	};
