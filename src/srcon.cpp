@@ -1,40 +1,69 @@
+#include "../include/srcon.h"
+
 #include <iostream>
 #include <string.h>
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
 #include <fcntl.h>
-#include <unistd.h>
+#include <cassert>
 #include <chrono>
 #include <thread>
 
-#include "../include/srcon.h"
+#ifdef _WIN32
+#include <WinSock2.h>
+#else
+#include <netinet/in.h>
+#include <sys/socket.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+#define closesocket(sock) close(sock)
+#define SOCKET_ERROR (-1)
+#endif
+
+static std::error_code GetSocketError()
+{
+#ifdef _WIN32
+	return std::error_code(WSAGetLastError(), std::system_category());
+#else
+	return std::error_code(errno, std::generic_category());
+#endif
+}
+
+#ifdef _WIN32
+static const std::error_code SRCON_EWOULDBLOCK(WSAEWOULDBLOCK, std::system_category());
+static const std::error_code SRCON_EINPROGRESS(WSAEINPROGRESS, std::system_category());
+#else
+static const std::error_code SRCON_EWOULDBLOCK(EWOULDBLOCK, std::generic_category());
+static const std::error_code SRCON_EINPROGRESS(EINPROGRESS, std::generic_category());
+#endif
 
 //#define DEBUG 1
-#ifdef DEBUG
+#ifdef _DEBUG
 #define LOG(str) std::clog << str << std::endl;
 #else
 #define LOG(str)
 #endif
 
-srcon::srcon(const std::string address, const int port, const std::string pass, const int timeout)
-: srcon(srcon_addr{address, port, pass}, timeout){}
+srcon::client::client(const std::string address, const int port, const std::string pass, const int timeout)
+	: client(srcon_addr{ address, port, pass }, timeout)
+{
+}
 
-srcon::srcon(const srcon_addr addr, const int timeout):
+srcon::client::client(const srcon_addr addr, const int timeout) :
 	addr(addr),
 	sockfd(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)),
 	id(0),
 	connected(false)
 {
-	if(sockfd == -1){
+	if (sockfd == -1)
+	{
 		LOG("Error opening socket.");
 		return;
 	}
 
 	LOG("Socket (" << sockfd << ") opened, connecting...");
-	if(!connect(timeout)){
+	if (!connect(timeout))
+	{
 		LOG("Connection not established.");
-		close(sockfd);
+		closesocket(sockfd);
 		return;
 	}
 
@@ -42,24 +71,48 @@ srcon::srcon(const srcon_addr addr, const int timeout):
 	connected = true;
 
 	send(addr.pass, SERVERDATA_AUTH);
-	unsigned char buffer[SRCON_HEADER_SIZE];
+	char buffer[SRCON_HEADER_SIZE];
 	::recv(sockfd, buffer, SRCON_HEADER_SIZE, SERVERDATA_RESPONSE_VALUE);
 	::recv(sockfd, buffer, SRCON_HEADER_SIZE, SERVERDATA_RESPONSE_VALUE);
 }
 
-srcon::~srcon(){
-	if(get_connected())
-		close(sockfd);
+srcon::client::~client()
+{
+	if (get_connected())
+		closesocket(sockfd);
 }
 
-bool srcon::connect(const int timeout) const{
-	struct sockaddr_in server;
-	bzero((char*)&server, sizeof(server));
+static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
+{
+#ifdef _WIN32
+	u_long value = isNonBlocking ? 1 : 0;
+	if (auto ret = ioctlsocket(s, FIONBIO, &value); ret == SOCKET_ERROR)
+	{
+		assert(!"Failed to change socket's non-blocking mode");
+		return false;
+	}
+#else
+	auto existing = fcntl(sockfd, F_GETFL, 0);
+
+	if (isNonBlocking)
+		existing |= O_NONBLOCK;
+	else
+		existing &= ~(O_NONBLOCK);
+
+	fcntl(sockfd, F_SETFL, existing);
+#endif
+
+	return true;
+}
+
+bool srcon::client::connect(const int timeout) const
+{
+	sockaddr_in server{};
 	server.sin_family = AF_INET;
 	server.sin_addr.s_addr = inet_addr(addr.addr.c_str());
 	server.sin_port = htons(addr.port);
 
-	fcntl(sockfd, F_SETFL, O_NONBLOCK);
+	SetNonBlocking(sockfd, true);
 
 	struct timeval tv;
 	tv.tv_sec = timeout;
@@ -68,28 +121,34 @@ bool srcon::connect(const int timeout) const{
 	FD_ZERO(&fds);
 	FD_SET(sockfd, &fds);
 
-	int status = -1;
-	if((status = ::connect(sockfd, (struct sockaddr *)&server, sizeof(server))) == -1)
-		if(errno != EINPROGRESS)
+	int status = SOCKET_ERROR;
+	if ((status = ::connect(sockfd, (struct sockaddr*)&server, sizeof(server))) == SOCKET_ERROR)
+	{
+		auto error = GetSocketError();
+		const auto msg = error.message();
+		if (error != SRCON_EWOULDBLOCK)
 			return false;
+	}
 
-	status = select(sockfd +1, NULL, &fds, NULL, &tv);
-	fcntl(sockfd, F_SETFL, fcntl(sockfd, F_GETFL, 0) & ~O_NONBLOCK);
+	status = select(sockfd + 1, NULL, &fds, NULL, &tv);
+	SetNonBlocking(sockfd, false);
 	return status != 0;
 }
 
-std::string srcon::send(const std::string data, const int type){
+std::string srcon::client::send(const std::string_view& data, const int type)
+{
 	LOG("Sending: " << data);
-	if(!get_connected())
+	if (!get_connected())
 		return "Connection has not been established.";
 
-	int packet_len = data.length() +SRCON_HEADER_SIZE;
-	unsigned char packet[packet_len];
-	pack(packet, data, packet_len, srcon::id++, type);
-	if(::send(sockfd, packet, packet_len, 0) < 0)
+	int packet_len = data.length() + SRCON_HEADER_SIZE;
+
+	auto packet = std::make_unique<char[]>(packet_len);
+	pack(packet.get(), data, packet_len, id++, type);
+	if (::send(sockfd, packet.get(), packet_len, 0) < 0)
 		return "Sending failed!";
 
-	if(type != SERVERDATA_EXECCOMMAND)
+	if (type != SERVERDATA_EXECCOMMAND)
 		return "";
 
 	unsigned long halt_id = id;
@@ -97,64 +156,75 @@ std::string srcon::send(const std::string data, const int type){
 	return recv(halt_id);
 }
 
-std::string srcon::recv(unsigned long halt_id) const{
+std::string srcon::client::recv(unsigned long halt_id) const
+{
 	unsigned int bytes = 0;
-	unsigned char* buffer = nullptr;
+	std::unique_ptr<char[]> buffer;
 	std::string response;
 	bool can_sleep = true;
-	while(1){
-		delete [] buffer;
+	while (1)
+	{
 		buffer = read_packet(bytes, can_sleep);
-		if(byte32_to_int(buffer) == halt_id)
+		if (byte32_to_int(buffer.get()) == halt_id)
 			break;
-		int offset = bytes -SRCON_HEADER_SIZE +3;
-		if(offset == -1)
+
+		int offset = bytes - SRCON_HEADER_SIZE + 3;
+		if (offset == -1)
 			continue;
-		std::string part(&buffer[8], &buffer[8] +offset);
+
+		std::string_view part(&buffer[8], offset);
 		response += part;
 	}
-	delete [] buffer;
+
 	buffer = read_packet(bytes, can_sleep);
-	delete [] buffer;
 	return response;
 }
 
-unsigned char* srcon::read_packet(unsigned int& size, bool& can_sleep) const{
+std::unique_ptr<char[]> srcon::client::read_packet(unsigned int& size, bool& can_sleep) const
+{
 	size_t len = read_packet_len();
-	if(can_sleep && len > SRCON_SLEEP_THRESHOLD){
+	if (can_sleep && len > SRCON_SLEEP_THRESHOLD)
+	{
 		std::this_thread::sleep_for(std::chrono::milliseconds(SRCON_SLEEP_MILLISECONDS));
 		can_sleep = false;
 	}
-	unsigned char* buffer = new unsigned char[len]{0};
+
+	auto buffer = std::make_unique<char[]>(len);
 	unsigned int bytes = 0;
-	do bytes += ::recv(sockfd, buffer, len -bytes, 0);
-	while(bytes < len);
+	do
+	{
+		bytes += ::recv(sockfd, buffer.get(), len - bytes, 0);
+
+	} while (bytes < len);
+
 	size = len;
 	return buffer;
 }
 
-size_t srcon::read_packet_len() const{
-	unsigned char* buffer = new unsigned char[4]{0};
+size_t srcon::client::read_packet_len() const
+{
+	char buffer[4]{};
 	::recv(sockfd, buffer, 4, 0);
 	const size_t len = byte32_to_int(buffer);
-	delete [] buffer;
 	return len;
 }
 
-void srcon::pack(unsigned char packet[], const std::string data, int packet_len, int id, int type) const{
-	int data_len = packet_len -SRCON_HEADER_SIZE;
-	bzero(packet, packet_len);
-	packet[0] = data_len +10;
+void srcon::client::pack(char packet[], const std::string_view& data, int packet_len, int id, int type) const
+{
+	int data_len = packet_len - SRCON_HEADER_SIZE;
+	std::memset(packet, 0, packet_len);
+	packet[0] = data_len + 10;
 	packet[4] = id;
 	packet[8] = type;
-	for(int i = 0; i < data_len; i++)
-		packet[12 +i] = data.c_str()[i];
+	for (int i = 0; i < data_len; i++)
+		packet[12 + i] = data[i];
 }
 
-size_t srcon::byte32_to_int(unsigned char* buffer) const{
+size_t srcon::client::byte32_to_int(const char* buffer) const
+{
 	return	static_cast<size_t>(
-				static_cast<unsigned char>(buffer[0])		|
-				static_cast<unsigned char>(buffer[1]) << 8	|
-				static_cast<unsigned char>(buffer[2]) << 16	|
-				static_cast<unsigned char>(buffer[3]) << 24 );
+		static_cast<unsigned char>(buffer[0]) |
+		static_cast<unsigned char>(buffer[1]) << 8 |
+		static_cast<unsigned char>(buffer[2]) << 16 |
+		static_cast<unsigned char>(buffer[3]) << 24);
 }
