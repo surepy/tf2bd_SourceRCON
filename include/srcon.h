@@ -36,37 +36,26 @@ namespace srcon
 	struct srcon_addr
 	{
 		std::string addr;
-		int port;
 		std::string pass;
+		int port = -1;
 	};
 
 	class client final
 	{
-		const srcon_addr addr;
-		unsigned int id;
-		bool connected;
+		srcon_addr m_Address;
+		unsigned int id = 0;
+		bool connected = false;
+		timeout_t m_Timeout{};
 
 	public:
-		client(const srcon_addr addr, const timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
-		client(const std::string address, const int port, const std::string password,
-			const timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
-
+		bool connect(srcon_addr addr, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
+		bool connect(std::string address, std::string password, int port = 27015, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
+		bool reconnect();
+		void disconnect();
 		std::string send(const std::string_view& message, PacketType type = PacketType::SERVERDATA_EXECCOMMAND);
 
-		inline bool get_connected() const
-		{
-			return connected;
-		}
-
-		inline bool is_connected() const
-		{
-			return get_connected();
-		}
-
-		inline srcon_addr get_addr() const
-		{
-			return addr;
-		}
+		inline bool is_connected() const { return connected; }
+		inline const srcon_addr& get_addr() const { return m_Address; }
 
 	private:
 		struct SocketTraits

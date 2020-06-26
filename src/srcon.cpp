@@ -1,3 +1,6 @@
+#include "..\include\srcon.h"
+#include "..\include\srcon.h"
+#include "..\include\srcon.h"
 #include "srcon.h"
 
 #include <iostream>
@@ -54,16 +57,7 @@ void srcon::SetLogFunc(LogFunc_t func)
 		s_LogFunc(ss.str()); \
 	} while (0)
 
-srcon::client::client(const std::string address, const int port, const std::string pass, const timeout_t timeout)
-	: client(srcon_addr{ address, port, pass }, timeout)
-{
-}
-
-srcon::client::client(const srcon_addr addr, const timeout_t timeout) :
-	addr(addr),
-	m_Socket(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP)),
-	id(0),
-	connected(false)
+bool srcon::client::connect(srcon_addr addr, timeout_t timeout)
 {
 #ifdef _WIN32
 	WSADATA wsaData{};
@@ -73,31 +67,47 @@ srcon::client::client(const srcon_addr addr, const timeout_t timeout) :
 		std::stringstream ss;
 		ss << "Failed to initialize Winsock 2.2: " << std::error_code(result, std::system_category()).message();
 		LOG(ss.str());
-		throw std::runtime_error(ss.str());
+		throw srcon_error(ss.str());
 	}
-#endif;
+#endif
+
+	m_Socket.reset(socket(AF_INET, SOCK_STREAM, IPPROTO_TCP));
 
 	if (m_Socket.value() == -1)
 	{
 		LOG("Error opening socket.");
-		return;
+		return false;
 	}
+
+	m_Address = std::move(addr);
+	m_Timeout = timeout;
 
 	LOG("Socket (" << m_Socket << ") opened, connecting...");
 	if (!connect(timeout))
 	{
 		LOG("Connection not established.");
 		m_Socket.reset();
-		return;
+		return false;
 	}
 
 	LOG("Connection established!");
 	connected = true;
 
-	send(addr.pass, PacketType::SERVERDATA_AUTH);
+	send(m_Address.pass, PacketType::SERVERDATA_AUTH);
 	char buffer[SRCON_HEADER_SIZE];
 	::recv(m_Socket.value(), buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
 	::recv(m_Socket.value(), buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
+
+	return true;
+}
+
+bool srcon::client::connect(std::string address, std::string password, int port, timeout_t timeout)
+{
+	srcon_addr addr;
+	addr.addr = std::move(address);
+	addr.pass = std::move(password);
+	addr.port = port;
+	return connect(std::move(addr), timeout);
 }
 
 static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
@@ -147,8 +157,8 @@ bool srcon::client::connect(const timeout_t timeout) const
 {
 	sockaddr_in server{};
 	server.sin_family = AF_INET;
-	server.sin_addr.s_addr = inet_addr(addr.addr.c_str());
-	server.sin_port = htons(addr.port);
+	server.sin_addr.s_addr = inet_addr(m_Address.addr.c_str());
+	server.sin_port = htons(m_Address.port);
 
 	SetNonBlocking(m_Socket.value(), true);
 
@@ -171,11 +181,22 @@ bool srcon::client::connect(const timeout_t timeout) const
 	return status != 0;
 }
 
+bool srcon::client::reconnect()
+{
+	disconnect();
+	return connect(m_Address, m_Timeout);
+}
+
+void srcon::client::disconnect()
+{
+	m_Socket.reset();
+}
+
 std::string srcon::client::send(const std::string_view& data, const PacketType type)
 {
 	//LOG("Sending: \"" << data << '"');
-	if (!get_connected())
-		throw std::runtime_error("Connection has not been established.");
+	if (!is_connected())
+		throw srcon_error("Connection has not been established.");
 
 	int packet_len = data.length() + SRCON_HEADER_SIZE;
 
@@ -185,7 +206,7 @@ std::string srcon::client::send(const std::string_view& data, const PacketType t
 	{
 		std::stringstream ss;
 		ss << "Sending failed! " << GetSocketError().message();
-		throw std::runtime_error(ss.str());
+		throw srcon_error(ss.str());
 	}
 
 	if (type != PacketType::SERVERDATA_EXECCOMMAND)
