@@ -1,7 +1,5 @@
 #pragma once
 
-#include <mh/memory/unique_object.hpp>
-
 #include <chrono>
 #include <memory>
 #include <stdexcept>
@@ -43,34 +41,32 @@ namespace srcon
 	class client final
 	{
 		srcon_addr m_Address;
-		unsigned int id = 0;
-		bool connected = false;
 		timeout_t m_Timeout{};
 
 	public:
-		bool connect(srcon_addr addr, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
-		bool connect(std::string address, std::string password, int port = 27015, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
-		bool reconnect();
+		~client();
+
+		void connect(srcon_addr addr, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
+		void connect(std::string address, std::string password, int port = 27015, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
+		void reconnect();
 		void disconnect();
 		std::string send(const std::string_view& message, PacketType type = PacketType::SERVERDATA_EXECCOMMAND);
 
-		inline bool is_connected() const { return connected; }
-		inline const srcon_addr& get_addr() const { return m_Address; }
+		bool is_connected() const { return !!m_Socket; }
+		const srcon_addr& get_addr() const { return m_Address; }
 
 	private:
-		struct SocketTraits
+		struct SocketData;
+		struct SocketDataDeleter
 		{
-			void delete_obj(int& socket) const;
-			int release_obj(int& socket) const;
-			bool is_obj_valid(int socket) const;
+			void operator()(SocketData* data) const;
 		};
-		mh::unique_object<int, SocketTraits> m_Socket;
 
-		bool connect(timeout_t timeout = SRCON_DEFAULT_TIMEOUT) const;
-		std::string recv(unsigned long) const;
-		size_t read_packet_len() const;
-		void pack(char packet[], const std::string_view& data, int packet_len, int id, PacketType type) const;
-		std::unique_ptr<char[]> read_packet(unsigned int&, bool&) const;
-		size_t byte32_to_int(const char*) const;
+		using SocketDataPtr = std::unique_ptr<SocketData, SocketDataDeleter>;
+
+		static SocketDataPtr ConnectImpl(const srcon_addr& addr, const timeout_t& timeout);
+		SocketDataPtr m_Socket;
+
+		static size_t byte32_to_int(const char*);
 	};
 }
