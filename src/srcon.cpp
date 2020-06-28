@@ -1,7 +1,5 @@
 #include "srcon.h"
 
-#include <mh/memory/unique_object.hpp>
-
 #include <cassert>
 #include <chrono>
 #include <fcntl.h>
@@ -51,6 +49,50 @@ static srcon::LogFunc_t s_LogFunc = &DefaultLogFunc;
 void srcon::SetLogFunc(LogFunc_t func)
 {
 	s_LogFunc = func ? func : &DefaultLogFunc;
+}
+
+auto srcon::srcon_error_category() -> const srcon_error_category_type&
+{
+	static srcon_error_category_type s_Instance;
+	return s_Instance;
+}
+
+std::string srcon::srcon_error_category_type::message(int condition) const
+{
+	switch ((srcon_errc)condition)
+	{
+	case srcon_errc::success:                    return "Success";
+	case srcon_errc::socket_send_failed:         return "Failed to send data on a socket";
+	case srcon_errc::bad_rcon_password:          return "Bad RCON password";
+	case srcon_errc::rcon_connect_failed:        return "Failed to initiate RCON connection";
+	case srcon_errc::no_preexisting_connection:  return "This action requires a preexisting RCON connection";
+
+	default:
+	{
+		std::stringstream ss;
+		ss << "srcon_errc(" << condition << ')';
+		return ss.str();
+	}
+	}
+}
+
+std::error_condition std::make_error_condition(srcon::srcon_errc e)
+{
+	return std::error_condition(int(e), srcon::srcon_error_category());
+}
+
+srcon::srcon_error::srcon_error(srcon_errc errc, std::error_code innerErrorCode, std::string detail) :
+	m_Errc(std::move(errc)), m_InnerErrorCode(std::move(innerErrorCode)), m_Detail(std::move(detail))
+{
+	std::stringstream ss;
+
+	ss << get_error_condition().message();
+	if (m_InnerErrorCode)
+		ss << ": " << m_InnerErrorCode.message();
+	if (!m_Detail.empty())
+		ss << ": " << m_Detail;
+
+	m_Message = ss.str();
 }
 
 #define LOG(msg) \
@@ -186,16 +228,13 @@ struct srcon::client::SocketData
 		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), packet.size(), 0);
 		if (sendResult < 0)
 		{
-			const auto error = GetSocketError();
-			std::stringstream ss;
-			ss << "Sending failed! " << error.message();
-			throw srcon_error(ss.str());
+			throw std::system_error(GetSocketError(), __FUNCTION__);
 		}
 		else if (sendResult != packet.size())
 		{
 			std::stringstream ss;
-			ss << "Sending failed! Sent " << sendResult << " bytes instead of " << packet.size() << " expected.";
-			throw srcon_error(ss.str());
+			ss << "Sent " << sendResult << " bytes instead of " << packet.size() << " expected.";
+			throw srcon_error(srcon_errc::socket_send_failed, {}, ss.str());
 		}
 
 		if (type == RequestPacketType::SERVERDATA_AUTH)
@@ -241,12 +280,7 @@ struct srcon::client::SocketData
 		{
 			auto recvResult = ::recv(m_Socket, buffer.get() + bytes, len - bytes, 0);
 			if (recvResult < 0)
-			{
-				const auto err = GetSocketError();
-				std::stringstream ss;
-				ss << __FUNCTION__ << "(): Error while receiving data: " << err.message();
-				throw srcon_error(ss.str());
-			}
+				throw std::system_error(GetSocketError(), __FUNCTION__);
 
 			bytes += recvResult;
 
@@ -341,13 +375,15 @@ static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
 	if (auto result = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutVal), sizeof(timeoutVal));
 		result != 0)
 	{
-		throw srcon::srcon_error("Failed to set socket receive timeout");
+		auto error = GetSocketError();
+		throw std::system_error(error, "SO_RCVTIMEO");
 	}
 
 	if (auto result = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeoutVal), sizeof(timeoutVal));
 		result != 0)
 	{
-		throw srcon::srcon_error("Failed to set socket send timeout");
+		auto error = GetSocketError();
+		throw std::system_error(error, "SO_SNDTIMEO");
 	}
 }
 
@@ -360,10 +396,7 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 	if (auto result = WSAStartup(MAKEWORD(2, 2), &wsaData);
 		result != 0)
 	{
-		std::stringstream ss;
-		ss << "Failed to initialize Winsock 2.2: " << std::error_code(result, std::system_category()).message();
-		LOG(ss.str());
-		throw srcon_error(ss.str());
+		throw std::system_error(std::error_code(result, std::system_category()), "WSAStartup()");
 	}
 #endif
 
@@ -371,7 +404,7 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 
 	retVal->m_Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
 	if (retVal->m_Socket == INVALID_SOCKET)
-		throw srcon_error("Error opening socket");
+		throw std::system_error(GetSocketError(), "socket()");
 
 	LOG("Socket (" << retVal->m_Socket << ") opened, connecting...");
 	SetSocketTimeout(retVal->m_Socket, timeout);
@@ -383,18 +416,13 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 		server.sin_addr.s_addr = inet_addr(addr.addr.c_str());
 		server.sin_port = htons(addr.port);
 
-
 		int status = SOCKET_ERROR;
 		if ((status = ::connect(retVal->m_Socket, (struct sockaddr*)&server, sizeof(server))) == SOCKET_ERROR)
 		{
 			auto error = GetSocketError();
 			const auto msg = error.message();
 			if (error != SRCON_EWOULDBLOCK)
-			{
-				std::stringstream ss;
-				ss << "Error during connection: " << error.message();
-				throw srcon_error(ss.str());
-			}
+				throw std::system_error(error, "connect()");
 		}
 	}
 	SetNonBlocking(retVal->m_Socket, false);
@@ -407,11 +435,7 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 			continue;
 
 		if (response.m_ID == -1)
-		{
-			std::stringstream ss;
-			ss << "Bad RCON password when connecting to " << addr.addr << ':' << addr.port;
-			throw srcon_error(ss.str());
-		}
+			throw srcon_error(srcon_errc::bad_rcon_password);
 	}
 
 	LOG("Connection established!");
@@ -427,7 +451,7 @@ void srcon::client::connect(srcon_addr addr, timeout_t timeout)
 	m_Socket = ConnectImpl(m_Address, m_Timeout);
 
 	if (!m_Socket)
-		throw srcon_error("Unknown error when connecting");
+		throw srcon_error(srcon_errc::rcon_connect_failed);
 }
 
 void srcon::client::connect(std::string address, std::string password, int port, timeout_t timeout)
@@ -442,7 +466,7 @@ void srcon::client::connect(std::string address, std::string password, int port,
 void srcon::client::reconnect()
 {
 	if (m_Address.addr.empty() || m_Address.port <= 0)
-		throw srcon_error("reconnect() failed: No preexisting connection");
+		throw srcon_error(srcon_errc::no_preexisting_connection, {}, __FUNCTION__);
 
 	disconnect();
 	return connect(m_Address, m_Timeout);
@@ -456,7 +480,7 @@ void srcon::client::disconnect()
 std::string srcon::client::send_command(const std::string_view& data)
 {
 	if (!is_connected())
-		throw srcon_error("Connection has not been established.");
+		throw srcon_error(srcon_errc::no_preexisting_connection, {}, __FUNCTION__);
 
 	auto responses = m_Socket->send(data);
 	if (responses.size() == 1)
