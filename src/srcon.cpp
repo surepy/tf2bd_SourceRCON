@@ -2,12 +2,14 @@
 
 #include <mh/memory/unique_object.hpp>
 
+#include <cassert>
+#include <chrono>
+#include <fcntl.h>
 #include <iostream>
 #include <string.h>
-#include <fcntl.h>
-#include <chrono>
 #include <sstream>
 #include <thread>
+#include <vector>
 
 #ifdef _WIN32
 #include <WinSock2.h>
@@ -19,6 +21,9 @@
 #define closesocket(sock) close(sock)
 #define SOCKET_ERROR (-1)
 #endif
+
+static constexpr bool SRCON_LOG_TX = false;
+static constexpr bool SRCON_LOG_RX = false;
 
 static std::error_code GetSocketError()
 {
@@ -81,9 +86,81 @@ struct SocketTraits
 	}
 };
 
+namespace srcon
+{
+	template<typename PacketType>
+	struct PacketHeader
+	{
+		static_assert(std::is_same_v<std::underlying_type_t<PacketType>, int32_t>);
+		int32_t m_Size{};
+		int32_t m_ID{};
+		PacketType m_Type{};
+	};
+
+	template<typename PacketType>
+	struct Packet
+	{
+		using header_type = srcon::PacketHeader<PacketType>;
+
+		static_assert(std::is_same_v<std::underlying_type_t<PacketType>, int32_t>);
+		int32_t m_ID{};
+		PacketType m_Type{};
+
+		std::string m_Body1;
+		std::string m_Body2;
+
+		std::vector<char> pack() const
+		{
+			//using PacketHeader = RequestPacketHeader<true>;
+			const auto packetSizeActual = sizeof(header_type) + m_Body1.size() + 1 + m_Body2.size() + 1;
+			assert(packetSizeActual >= sizeof(header_type));
+
+			std::vector<char> packet(packetSizeActual);
+			header_type& header = *reinterpret_cast<header_type*>(packet.data());
+			header.m_Size = packetSizeActual - sizeof(header_type::m_Size);
+			header.m_ID = m_ID;
+			header.m_Type = m_Type;
+
+			char* destPtr = packet.data() + sizeof(header_type);
+			std::memcpy(destPtr, m_Body1.data(), m_Body1.size());
+			destPtr += m_Body1.size();
+			*(destPtr++) = '\0';
+
+			std::memcpy(destPtr, m_Body2.data(), m_Body2.size());
+			destPtr += m_Body2.size();
+			*(destPtr++) = '\0';
+
+			assert(destPtr == (packet.data() + packet.size()));
+			return packet;
+		}
+	};
+
+	using RequestPacket = Packet<RequestPacketType>;
+	using ResponsePacket = Packet<ResponsePacketType>;
+	using RequestPacketHeader = PacketHeader<RequestPacketType>;
+	using ResponsePacketHeader = PacketHeader<ResponsePacketType>;
+
+	//static_assert(sizeof(PacketHeader) == 12);
+	static constexpr int32_t SRCON_MIN_ACTUAL_PACKET_SIZE = sizeof(PacketHeader<RequestPacketType>) + 1 + 1;
+
+#if 0
+#pragma pack(push)
+#pragma pack(1)
+	template<typename PacketType, size_t bodySize1, size_t bodySize2 = 0>
+	struct Packet : PacketHeader<true, PacketType>
+	{
+		char m_Body1[bodySize1 + 1]{};
+		char m_Body2[bodySize2 + 1]{};
+	};
+#pragma pack(pop)
+
+	static_assert(sizeof(Packet<RequestPacketType, 0, 0>) == 14);
+#endif
+}
+
 struct srcon::client::SocketData
 {
-	unsigned int id = 0;
+	uint32_t m_NextID = 1;
 
 	~SocketData()
 	{
@@ -93,62 +170,76 @@ struct srcon::client::SocketData
 
 	SOCKET m_Socket = INVALID_SOCKET;
 
-	std::string send(const std::string_view& data, PacketType type = PacketType::SERVERDATA_EXECCOMMAND)
+	std::vector<ResponsePacket> send(const std::string_view& data,
+		RequestPacketType type = RequestPacketType::SERVERDATA_EXECCOMMAND, bool reliable = true)
 	{
-		//LOG("Sending: \"" << data << '"');
+		RequestPacket packetTemp;
+		packetTemp.m_Type = type;
+		packetTemp.m_ID = m_NextID++;
+		packetTemp.m_Body1 = data;
 
-		int packet_len = data.length() + SRCON_HEADER_SIZE;
+		auto packet = packetTemp.pack();
 
-		auto packet = std::make_unique<char[]>(packet_len);
-		pack(packet.get(), data, packet_len, id++, type);
-		if (::send(m_Socket, packet.get(), packet_len, 0) < 0)
+		if constexpr (SRCON_LOG_TX)
+			LOG('[' << packetTemp.m_ID << "] Sending: \"" << data << '"');
+
+		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), packet.size(), 0);
+		if (sendResult < 0)
+		{
+			const auto error = GetSocketError();
+			std::stringstream ss;
+			ss << "Sending failed! " << error.message();
+			throw srcon_error(ss.str());
+		}
+		else if (sendResult != packet.size())
 		{
 			std::stringstream ss;
-			ss << "Sending failed! " << GetSocketError().message();
+			ss << "Sending failed! Sent " << sendResult << " bytes instead of " << packet.size() << " expected.";
 			throw srcon_error(ss.str());
 		}
 
-		if (type != PacketType::SERVERDATA_EXECCOMMAND)
-			return "";
+		if (type == RequestPacketType::SERVERDATA_AUTH)
+		{
+			std::vector<ResponsePacket> responses;
+			do
+			{
+				responses.push_back(read_packet());
 
-		unsigned long halt_id = id;
-		send("", PacketType::SERVERDATA_RESPONSE_VALUE);
+			} while (responses.back().m_Type != ResponsePacketType::SERVERDATA_AUTH_RESPONSE);
+
+			return responses;
+		}
+
+		//if (type != PacketType::SERVERDATA_EXECCOMMAND)
+		//	return "";
+
+		if (!reliable)
+			return {};
+
+		unsigned long halt_id = m_NextID;
+		send("", RequestPacketType::SERVERDATA_EXECCOMMAND, false);
 		return recv(halt_id);
-	}
-
-	void pack(char packet[], const std::string_view& data, int packet_len, int id, PacketType type) const
-	{
-		int data_len = packet_len - SRCON_HEADER_SIZE;
-		std::memset(packet, 0, packet_len);
-		packet[0] = data_len + 10;
-		packet[4] = id;
-		packet[8] = int(type);
-		for (int i = 0; i < data_len; i++)
-			packet[12 + i] = data[i];
 	}
 
 	size_t read_packet_len() const
 	{
-		char buffer[4]{};
+		//char buffer[4]{};
+		char buffer[64]{};
 		::recv(m_Socket, buffer, 4, 0);
 		const size_t len = byte32_to_int(buffer);
 		return len;
 	}
 
-	std::unique_ptr<char[]> read_packet(unsigned int& size, bool& can_sleep) const
+	ResponsePacket read_packet() const
 	{
+		ResponsePacket packet;
 		size_t len = read_packet_len();
-		if (can_sleep && len > SRCON_SLEEP_THRESHOLD)
-		{
-			std::this_thread::sleep_for(std::chrono::milliseconds(SRCON_SLEEP_MILLISECONDS));
-			can_sleep = false;
-		}
 
 		auto buffer = std::make_unique<char[]>(len);
 		unsigned int bytes = 0;
 		do
 		{
-			auto recvResult = ::recv(m_Socket, buffer.get(), len - bytes, 0);
+			auto recvResult = ::recv(m_Socket, buffer.get() + bytes, len - bytes, 0);
 			if (recvResult < 0)
 			{
 				const auto err = GetSocketError();
@@ -161,38 +252,46 @@ struct srcon::client::SocketData
 
 		} while (bytes < len);
 
-		size = len;
-		return buffer;
+		struct PacketHeaderNoSize
+		{
+			int32_t m_ID;
+			ResponsePacketType m_Type;
+		};
+
+		const auto& header = *reinterpret_cast<const PacketHeaderNoSize*>(buffer.get());
+
+		packet.m_ID = header.m_ID;
+		packet.m_Type = header.m_Type;
+
+		auto body = std::string_view(&buffer.get()[sizeof(PacketHeaderNoSize)],
+			len - sizeof(PacketHeaderNoSize));
+
+		auto firstNullTerm = body.find('\0');
+		packet.m_Body1 = body.substr(0, firstNullTerm);
+
+		auto secondNullTerm = body.rfind('\0');
+		packet.m_Body2 = body.substr(firstNullTerm + 1, secondNullTerm - (firstNullTerm + 1));
+
+		if constexpr (SRCON_LOG_RX)
+			LOG('[' << packet.m_ID << "] Receiving: " << packet.m_Body1);
+
+		return packet;
 	}
 
-	std::string recv(unsigned long halt_id) const
+	std::vector<ResponsePacket> recv(unsigned long halt_id) const
 	{
-		unsigned int bytes = 0;
-		std::unique_ptr<char[]> buffer;
-		std::string response;
-		bool can_sleep = false;//true;
+		std::vector<ResponsePacket> responses;
 		while (1)
 		{
-			buffer = read_packet(bytes, can_sleep);
-			if (byte32_to_int(buffer.get()) == halt_id)
+			auto packet = read_packet();
+			if (packet.m_ID == halt_id)
 				break;
 
-			int offset = bytes - SRCON_HEADER_SIZE + 3;
-			if (offset == -1)
-				continue;
-			else if (offset < 0)
-			{
-				std::stringstream ss;
-				ss << "Invalid offset " << offset;
-				throw srcon_error(ss.str());
-			}
-
-			std::string_view part(&buffer[8], offset);
-			response += part;
+			responses.push_back(std::move(packet));
 		}
 
-		buffer = read_packet(bytes, can_sleep);
-		return response;
+		//auto packet2 = read_packet();
+		return responses;
 	}
 };
 
@@ -298,10 +397,20 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 	}
 	SetNonBlocking(retVal->m_Socket, false);
 
-	retVal->send(addr.pass, PacketType::SERVERDATA_AUTH);
-	char buffer[SRCON_HEADER_SIZE];
-	::recv(retVal->m_Socket, buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
-	::recv(retVal->m_Socket, buffer, SRCON_HEADER_SIZE, (int)PacketType::SERVERDATA_RESPONSE_VALUE);
+	auto authResponses = retVal->send(addr.pass, RequestPacketType::SERVERDATA_AUTH);
+
+	for (auto& response : authResponses)
+	{
+		if (response.m_Type != ResponsePacketType::SERVERDATA_AUTH_RESPONSE)
+			continue;
+
+		if (response.m_ID == -1)
+		{
+			std::stringstream ss;
+			ss << "Bad RCON password when connecting to " << addr.addr << ':' << addr.port;
+			throw srcon_error(ss.str());
+		}
+	}
 
 	LOG("Connection established!");
 	return retVal;
@@ -342,17 +451,28 @@ void srcon::client::disconnect()
 	m_Socket.reset();
 }
 
-std::string srcon::client::send(const std::string_view& data, PacketType type)
+std::string srcon::client::send_command(const std::string_view& data)
 {
 	if (!is_connected())
 		throw srcon_error("Connection has not been established.");
 
-	return m_Socket->send(data, type);
+	auto responses = m_Socket->send(data);
+	if (responses.size() == 1)
+		return responses[0].m_Body1;
+
+	std::string retVal;
+
+	for (auto& response : responses)
+	{
+		retVal += response.m_Body1;
+	}
+
+	return retVal;
 }
 
-size_t srcon::client::byte32_to_int(const char* buffer)
+int srcon::client::byte32_to_int(const char* buffer)
 {
-	return	static_cast<size_t>(
+	return	static_cast<int>(
 		static_cast<unsigned char>(buffer[0]) |
 		static_cast<unsigned char>(buffer[1]) << 8 |
 		static_cast<unsigned char>(buffer[2]) << 16 |

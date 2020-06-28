@@ -14,17 +14,32 @@ namespace srcon
 		srcon_error(std::string msg) : std::runtime_error(std::move(msg)) {}
 	};
 
-	enum class PacketType
+	enum class RequestPacketType : int32_t
 	{
-		SERVERDATA_AUTH = 3,
+		SERVERDATA_REQUESTVALUE = 0,
+		SERVERDATA_SETVALUE = 1,
 		SERVERDATA_EXECCOMMAND = 2,
-		SERVERDATA_AUTH_RESPONSE = 2,
+		SERVERDATA_AUTH = 3,
+		SERVERDATA_VPROF = 4,
+		SERVERDATA_REMOVE_VPROF = 5,
+		SERVERDATA_TAKE_SCREENSHOT = 6,
+		SERVERDATA_SEND_CONSOLE_LOG = 7,
+	};
+
+	enum class ResponsePacketType : int32_t
+	{
 		SERVERDATA_RESPONSE_VALUE = 0,
+		SERVERDATA_UPDATE = 1,
+		SERVERDATA_AUTH_RESPONSE = 2,
+		SERVERDATA_VPROF_DATA = 3,
+		SERVERDATA_VPROF_GROUPS = 4,
+		SERVERDATA_SCREENSHOT_RESPONSE = 5,
+		SERVERDATA_CONSOLE_LOG_RESPONSE = 6,
+		SERVERDATA_RESPONSE_STRING = 7,
 	};
 
 	using timeout_t = std::chrono::steady_clock::duration;
 	static constexpr timeout_t SRCON_DEFAULT_TIMEOUT = std::chrono::seconds(4);
-	static constexpr int SRCON_HEADER_SIZE = 14;
 	static constexpr int SRCON_SLEEP_THRESHOLD = 1024;
 	static constexpr int SRCON_SLEEP_MILLISECONDS = 500;
 
@@ -50,7 +65,7 @@ namespace srcon
 		void connect(std::string address, std::string password, int port = 27015, timeout_t timeout = SRCON_DEFAULT_TIMEOUT);
 		void reconnect();
 		void disconnect();
-		std::string send(const std::string_view& message, PacketType type = PacketType::SERVERDATA_EXECCOMMAND);
+		std::string send_command(const std::string_view& message);
 
 		bool is_connected() const { return !!m_Socket; }
 		const srcon_addr& get_addr() const { return m_Address; }
@@ -67,6 +82,6 @@ namespace srcon
 		static SocketDataPtr ConnectImpl(const srcon_addr& addr, const timeout_t& timeout);
 		SocketDataPtr m_Socket;
 
-		static size_t byte32_to_int(const char*);
+		static int byte32_to_int(const char*);
 	};
 }
