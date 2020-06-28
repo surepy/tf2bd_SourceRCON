@@ -353,6 +353,8 @@ static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
 
 auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout) -> SocketDataPtr
 {
+	LOG("Connecting to " << addr.addr << ':' << addr.port << "...");
+
 #ifdef _WIN32
 	WSADATA wsaData{};
 	if (auto result = WSAStartup(MAKEWORD(2, 2), &wsaData);
