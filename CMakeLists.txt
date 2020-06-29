@@ -18,8 +18,9 @@ add_library(SourceRCON
 	"include/srcon/async_client.h"
 	"src/async_client.cpp"
 	"src/srcon_internal.h"
-	"src/srcon_internal.cpp"
- "include/srcon/srcon.h" "src/srcon.cpp")
+	"include/srcon/srcon.h"
+	"src/srcon.cpp"
+)
 
 target_link_libraries(SourceRCON PRIVATE mh_stuff)
 
