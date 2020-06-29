@@ -12,6 +12,9 @@ jobs:
         buildType: ["Debug", "Release"]
 
     steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+
     - name: run-cmake
       uses: lukka/run-cmake@v2.5
       with:
