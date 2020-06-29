@@ -24,21 +24,30 @@
 static constexpr bool SRCON_LOG_TX = false;
 static constexpr bool SRCON_LOG_RX = false;
 
+static std::error_code MakeSocketError(int errc)
+{
+#ifdef _WIN32
+	return std::error_code(errc, std::system_category());
+#else
+	return std::error_code(errc, std::generic_category());
+#endif
+}
+
 static std::error_code GetSocketError()
 {
 #ifdef _WIN32
-	return std::error_code(WSAGetLastError(), std::system_category());
+	return MakeSocketError(WSAGetLastError());
 #else
-	return std::error_code(errno, std::generic_category());
+	return MakeSocketError(errno);
 #endif
 }
 
 #ifdef _WIN32
-static const std::error_code SRCON_EWOULDBLOCK(WSAEWOULDBLOCK, std::system_category());
-static const std::error_code SRCON_EINPROGRESS(WSAEINPROGRESS, std::system_category());
+static const std::error_code SRCON_EWOULDBLOCK = MakeSocketError(WSAEWOULDBLOCK);
+static const std::error_code SRCON_EINPROGRESS = MakeSocketError(WSAEINPROGRESS);
 #else
-static const std::error_code SRCON_EWOULDBLOCK(EWOULDBLOCK, std::generic_category());
-static const std::error_code SRCON_EINPROGRESS(EINPROGRESS, std::generic_category());
+static const std::error_code SRCON_EWOULDBLOCK = MakeSocketError(EWOULDBLOCK);
+static const std::error_code SRCON_EINPROGRESS = MakeSocketError(EINPROGRESS);
 #endif
 
 struct SocketTraits
@@ -301,28 +310,68 @@ static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
 	return true;
 }
 
+static timeval ToTimeval(srcon::timeout_t duration)
+{
+	timeval timeoutVal{};
+	timeoutVal.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
+	timeoutVal.tv_usec = std::chrono::duration_cast<std::chrono::microseconds>(duration - std::chrono::seconds(timeoutVal.tv_sec)).count();
+	return timeoutVal;
+}
+
 static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
 {
 #ifdef _WIN32
 	DWORD timeoutVal = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
 #else
-	timeval timeoutVal{};
-	timeoutVal.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(time).count();
-	timeoutVal.tv_usec = std::chrono::duration_cast<std::chrono::microseconds>(time - std::chrono::seconds(timeoutVal.tv_sec)).count();
+	timeval timeoutVal = ToTimeval(time);
 #endif
 
 	if (auto result = setsockopt(s, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char*>(&timeoutVal), sizeof(timeoutVal));
 		result != 0)
 	{
-		auto error = GetSocketError();
-		throw srcon::srcon_error(srcon::srcon_errc::rcon_connect_failed, error, "SO_RCVTIMEO");
+		throw srcon::srcon_error(srcon::srcon_errc::rcon_connect_failed, GetSocketError(), "SO_RCVTIMEO");
 	}
 
 	if (auto result = setsockopt(s, SOL_SOCKET, SO_SNDTIMEO, reinterpret_cast<const char*>(&timeoutVal), sizeof(timeoutVal));
 		result != 0)
 	{
-		auto error = GetSocketError();
-		throw srcon::srcon_error(srcon::srcon_errc::rcon_connect_failed, error, "SO_SNDTIMEO");
+		throw srcon::srcon_error(srcon::srcon_errc::rcon_connect_failed, GetSocketError(), "SO_SNDTIMEO");
+	}
+}
+
+static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout)
+{
+	using namespace srcon;
+
+	timeval timeoutVal = ToTimeval(timeout);
+
+	fd_set writeSet;
+	FD_ZERO(&writeSet);
+	FD_SET(s, &writeSet);
+	{
+		const auto result = select(s, nullptr, &writeSet, nullptr, &timeoutVal);
+		if (result == SOCKET_ERROR)
+			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): select()");
+	}
+
+	if (FD_ISSET(s, &writeSet))
+		return; // Success
+
+	{
+		int error;
+		int errorSize = sizeof(error);
+		const auto result = getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorSize);
+		if (result == SOCKET_ERROR)
+			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): getsockopt()");
+
+		if (errorSize != sizeof(error))
+		{
+			std::stringstream ss;
+			ss << __FUNCTION__ << "(): After getsockopt(), errorSize == " << errorSize;
+			throw std::runtime_error(ss.str());
+		}
+
+		throw srcon_error(srcon_errc::rcon_connect_failed, MakeSocketError(error), "WaitForSocketConnection(): socket error");
 	}
 }
 
@@ -365,6 +414,8 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 		}
 	}
 	SetNonBlocking(retVal->m_Socket, false);
+
+	WaitForSocketConnection(retVal->m_Socket, timeout);
 
 	auto authResponses = retVal->send(addr.pass, RequestPacketType::SERVERDATA_AUTH);
 
