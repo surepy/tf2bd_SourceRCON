@@ -1,7 +1,4 @@
 bin/
-
-src/client.cpp
-
 **/*.swp
 .vs/
 out/
