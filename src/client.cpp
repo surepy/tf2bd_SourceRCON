@@ -1,9 +1,10 @@
-#include "srcon/client.h"
 #include "srcon/srcon.h"
+#include "srcon/client.h"
 #include "srcon_internal.h"
 
 #include <cassert>
 #include <chrono>
+#include <cstring>
 #include <fcntl.h>
 #include <string.h>
 #include <sstream>
@@ -11,14 +12,17 @@
 #include <vector>
 
 #ifdef _WIN32
-#include <WinSock2.h>
+	#include <WinSock2.h>
+	using socklen_t = int;
 #else
-#include <netinet/in.h>
-#include <sys/socket.h>
-#include <arpa/inet.h>
-#include <unistd.h>
-#define closesocket(sock) close(sock)
-#define SOCKET_ERROR (-1)
+	#include <netinet/in.h>
+	#include <sys/socket.h>
+	#include <arpa/inet.h>
+	#include <unistd.h>
+	using SOCKET = int;
+	static auto closesocket(SOCKET sock) { return close(sock); }
+	static constexpr int SOCKET_ERROR = -1;
+	static constexpr int INVALID_SOCKET = -1;
 #endif
 
 static constexpr bool SRCON_LOG_TX = false;
@@ -297,14 +301,14 @@ static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
 		return false;
 	}
 #else
-	auto existing = fcntl(sockfd, F_GETFL, 0);
+	auto existing = fcntl(s, F_GETFL, 0);
 
 	if (isNonBlocking)
 		existing |= O_NONBLOCK;
 	else
 		existing &= ~(O_NONBLOCK);
 
-	fcntl(sockfd, F_SETFL, existing);
+	fcntl(s, F_SETFL, existing);
 #endif
 
 	return true;
@@ -359,7 +363,7 @@ static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout)
 
 	{
 		int error;
-		int errorSize = sizeof(error);
+		socklen_t errorSize = sizeof(error);
 		const auto result = getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorSize);
 		if (result == SOCKET_ERROR)
 			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): getsockopt()");

@@ -2,7 +2,6 @@
 
 #include <chrono>
 #include <memory>
-#include <exception>
 #include <string>
 #include <string_view>
 

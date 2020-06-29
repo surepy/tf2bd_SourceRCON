@@ -72,3 +72,8 @@ srcon::srcon_error::srcon_error(srcon_errc errc, const char* detail) :
 	srcon_error(std::move(errc), {}, detail)
 {
 }
+
+std::error_condition srcon::srcon_error::get_error_condition() const
+{
+	return std::make_error_condition(get_errc());
+}

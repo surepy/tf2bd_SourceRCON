@@ -41,11 +41,11 @@ namespace srcon
 		srcon_error(srcon_errc errc, std::error_code innerErrorCode = {}, const char* detail = nullptr);
 		srcon_error(srcon_errc errc, const char* detail);
 
-		std::error_condition get_error_condition() const { return m_Errc; }
+		std::error_condition get_error_condition() const;
 		std::error_code get_inner_error_code() const { return m_InnerErrorCode; }
 		srcon_errc get_errc() const { return m_Errc; }
 
-		const char* what() const override { return m_Message.c_str(); }
+		const char* what() const noexcept override { return m_Message.c_str(); }
 
 	private:
 		srcon_errc m_Errc;
