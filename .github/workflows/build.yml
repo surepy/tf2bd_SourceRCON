@@ -3,19 +3,66 @@ name: build
 on: [push]
 
 jobs:
-  ci:
-    runs-on: ${{ matrix.os }}
+  build-windows:
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        os: [windows-latest, ubuntu-latest, macos-latest]
         buildType: ["Debug", "Release"]
-
+        buildArch: ["Win32", "x64"]
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-
+    - name: Add msbuild to PATH
+      uses: microsoft/setup-msbuild@v1.0.0
     - name: run-cmake
-      uses: lukka/run-cmake@v2.5
-      with:
-        cmakeBuildType: "${{ matrix.buildType }}"
+      env:
+        CXXFLAGS: /WX
+      run: |
+        mkdir cmake_out
+        cd cmake_out
+        cmake -A${{ matrix.buildArch }} ../
+        cmake --build . --config ${{ matrix.buildType }}
+    # - name: run-cmake
+    #   uses: lukka/run-cmake@v2.5
+    #   with:
+    #     cmakeAppendedArgs: '-G "Visual Studio 16 2019" -A${{ matrix.buildArch }} -D CMAKE_CXX_FLAGS=/WX'
+    #     cmakeBuildType: ${{ matrix.buildType }}
+
+  build-linux:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        buildType: ["Debug", "Release"]
+        buildCompiler: ["g++-9", "clang++-9"]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: run-cmake
+      env:
+        CXX: ${{ matrix.buildCompiler }}
+        CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
+      run: |
+        mkdir cmake_out
+        cd cmake_out
+        cmake -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} ../
+        cmake --build .
+
+  build-macos:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        buildType: ["Debug", "Release"]
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v2
+    - name: run-cmake
+      env:
+        CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
+      run: |
+        mkdir cmake_out
+        cd cmake_out
+        cmake -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} ../
+        cmake --build .

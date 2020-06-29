@@ -1,3 +1,5 @@
+#define _WINSOCK_DEPRECATED_NO_WARNINGS 1
+
 #include "srcon/srcon.h"
 #include "srcon/client.h"
 #include "srcon_internal.h"
@@ -54,39 +56,17 @@ static const std::error_code SRCON_EWOULDBLOCK = MakeSocketError(EWOULDBLOCK);
 static const std::error_code SRCON_EINPROGRESS = MakeSocketError(EINPROGRESS);
 #endif
 
-struct SocketTraits
-{
-	void delete_obj(SOCKET& socket) const
-	{
-		if (auto result = closesocket(socket); result != 0)
-		{
-			auto err = GetSocketError();
-			std::stringstream ss;
-			ss << __FUNCTION__ << "(): Failed to closesocket(): " << err.message();
-		}
-
-		socket = INVALID_SOCKET;
-	}
-	int release_obj(SOCKET& socket) const
-	{
-		int temp = socket;
-		socket = 0;
-		return temp;
-	}
-	bool is_obj_valid(SOCKET socket) const
-	{
-		return socket != INVALID_SOCKET;
-	}
-};
-
 namespace srcon
 {
+	using PacketID_t = int32_t;
+	using PacketSize_t = int32_t;
+
 	template<typename PacketType>
 	struct PacketHeader
 	{
 		static_assert(std::is_same_v<std::underlying_type_t<PacketType>, int32_t>);
-		int32_t m_Size{};
-		int32_t m_ID{};
+		PacketSize_t m_Size{};
+		PacketID_t m_ID{};
 		PacketType m_Type{};
 	};
 
@@ -96,7 +76,7 @@ namespace srcon
 		using header_type = srcon::PacketHeader<PacketType>;
 
 		static_assert(std::is_same_v<std::underlying_type_t<PacketType>, int32_t>);
-		int32_t m_ID{};
+		PacketID_t m_ID{};
 		PacketType m_Type{};
 
 		std::string m_Body1;
@@ -110,7 +90,7 @@ namespace srcon
 
 			std::vector<char> packet(packetSizeActual);
 			header_type& header = *reinterpret_cast<header_type*>(packet.data());
-			header.m_Size = packetSizeActual - sizeof(header_type::m_Size);
+			header.m_Size = PacketSize_t(packetSizeActual - sizeof(header_type::m_Size));
 			header.m_ID = m_ID;
 			header.m_Type = m_Type;
 
@@ -132,9 +112,6 @@ namespace srcon
 	using ResponsePacket = Packet<ResponsePacketType>;
 	using RequestPacketHeader = PacketHeader<RequestPacketType>;
 	using ResponsePacketHeader = PacketHeader<ResponsePacketType>;
-
-	//static_assert(sizeof(PacketHeader) == 12);
-	static constexpr int32_t SRCON_MIN_ACTUAL_PACKET_SIZE = sizeof(PacketHeader<RequestPacketType>) + 1 + 1;
 
 #if 0
 #pragma pack(push)
@@ -176,13 +153,13 @@ struct srcon::client::SocketData
 		if constexpr (SRCON_LOG_TX)
 			LOG('[' << packetTemp.m_ID << "] Sending: \"" << data << '"');
 
-		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), packet.size(), 0);
+		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), int(packet.size()), 0);
 		if (sendResult < 0)
 		{
 			auto error = GetSocketError();
 			throw srcon_error(srcon_errc::socket_send_failed, error, __FUNCTION__);
 		}
-		else if (sendResult != packet.size())
+		else if (sendResult != int(packet.size()))
 		{
 			std::stringstream ss;
 			ss << "Sent " << sendResult << " bytes instead of " << packet.size() << " expected.";
@@ -212,22 +189,20 @@ struct srcon::client::SocketData
 		return recv(halt_id);
 	}
 
-	size_t read_packet_len() const
+	PacketSize_t read_packet_len() const
 	{
-		//char buffer[4]{};
-		char buffer[64]{};
+		char buffer[4]{};
 		::recv(m_Socket, buffer, 4, 0);
-		const size_t len = byte32_to_int(buffer);
-		return len;
+		return byte32_to_int(buffer);
 	}
 
 	ResponsePacket read_packet() const
 	{
 		ResponsePacket packet;
-		size_t len = read_packet_len();
+		const auto len = read_packet_len();
 
 		auto buffer = std::make_unique<char[]>(len);
-		unsigned int bytes = 0;
+		int bytes = 0;
 		do
 		{
 			auto recvResult = ::recv(m_Socket, buffer.get() + bytes, len - bytes, 0);
@@ -240,7 +215,7 @@ struct srcon::client::SocketData
 
 		struct PacketHeaderNoSize
 		{
-			int32_t m_ID;
+			PacketID_t m_ID;
 			ResponsePacketType m_Type;
 		};
 
@@ -264,7 +239,7 @@ struct srcon::client::SocketData
 		return packet;
 	}
 
-	std::vector<ResponsePacket> recv(unsigned long halt_id) const
+	std::vector<ResponsePacket> recv(PacketID_t halt_id) const
 	{
 		std::vector<ResponsePacket> responses;
 		while (1)
@@ -314,18 +289,22 @@ static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
 	return true;
 }
 
-static timeval ToTimeval(srcon::timeout_t duration)
+static timeval ToTimeval(srcon::timeout_t dur)
 {
+	using namespace std::chrono;
+
 	timeval timeoutVal{};
-	timeoutVal.tv_sec = std::chrono::duration_cast<std::chrono::seconds>(duration).count();
-	timeoutVal.tv_usec = std::chrono::duration_cast<std::chrono::microseconds>(duration - std::chrono::seconds(timeoutVal.tv_sec)).count();
+	auto seconds = duration_cast<duration<decltype(timeval::tv_sec)>>(dur);
+	timeoutVal.tv_sec = seconds.count();
+	timeoutVal.tv_usec = duration_cast<duration<decltype(timeval::tv_usec), std::micro>>(dur - seconds).count();
 	return timeoutVal;
 }
 
 static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
 {
 #ifdef _WIN32
-	DWORD timeoutVal = std::chrono::duration_cast<std::chrono::milliseconds>(time).count();
+	using namespace std::chrono;
+	DWORD timeoutVal = duration_cast<duration<DWORD, std::milli>>(time).count();
 #else
 	timeval timeoutVal = ToTimeval(time);
 #endif
@@ -353,7 +332,7 @@ static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout)
 	FD_ZERO(&writeSet);
 	FD_SET(s, &writeSet);
 	{
-		const auto result = select(s, nullptr, &writeSet, nullptr, &timeoutVal);
+		const auto result = select(int(s + 1), nullptr, &writeSet, nullptr, &timeoutVal);
 		if (result == SOCKET_ERROR)
 			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): select()");
 	}

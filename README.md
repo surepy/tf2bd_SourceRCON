@@ -1,4 +1,4 @@
-# C++ Source RCON implementation
+# C++ Source RCON implementation ![build](https://github.com/PazerOP/SourceRCON/workflows/build/badge.svg)
 
 Uses Valve's [Source RCON protocol](https://developer.valvesoftware.com/wiki/Source_RCON_Protocol) for communicating with remote Source engine servers.
 
@@ -14,13 +14,13 @@ Uses Valve's [Source RCON protocol](https://developer.valvesoftware.com/wiki/Sou
 * Implemented as a C++ class
 * Exposes a very simple interface
 * Supports multi-packet responses
-* Non-threaded, delays for larger reponses
+* Synchronous and asynchronous (`std::future`) clients
 * Connection timeout (default 4 seconds)
 
 **Notes about this implementation**:
 
 * This is not a standalone application.
-* It works on UNIX systems **only** as of now.
+* Works on Windows/mac/linux.
 
 # Example Usage [^](#contents)
 

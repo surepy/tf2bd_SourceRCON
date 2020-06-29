@@ -15,3 +15,12 @@ add_library(SourceRCON
 set_property(TARGET SourceRCON PROPERTY CXX_STANDARD 17)
 
 target_include_directories(SourceRCON PUBLIC include)
+
+option(SourceRCON_WARNINGS_AS_ERRORS "Treat compile warnings as errors." off)
+if (SourceRCON_WARNINGS_AS_ERRORS)
+	if (MSVC)
+		target_compile_options(SourceRCON PRIVATE /WX)
+	else()
+		target_compile_options(SourceRCON PRIVATE -Werror)
+	endif()
+endif()
