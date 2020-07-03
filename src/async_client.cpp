@@ -30,7 +30,7 @@ void async_client::set_addr(srcon_addr addr)
 	m_ClientThreadData->m_Address = std::move(addr);
 }
 
-std::string async_client::ClientThreadData::send_command(const std::string_view& command)
+std::string async_client::ClientThreadData::send_command(const std::string_view& command) try
 {
 	std::lock_guard lock(m_ClientMutex);
 
@@ -42,6 +42,11 @@ std::string async_client::ClientThreadData::send_command(const std::string_view&
 	}
 
 	return m_Client.send_command(command);
+}
+catch (const std::exception& e)
+{
+	LOG(__FUNCTION__ << "(): " << e.what());
+	throw;
 }
 
 std::string async_client::send_command(const std::string_view& command)
