@@ -72,7 +72,6 @@ namespace srcon
 
 		using SocketDataPtr = std::unique_ptr<SocketData, SocketDataDeleter>;
 
-		static SocketDataPtr ConnectImpl(const srcon_addr& addr, const timeout_t& timeout);
 		SocketDataPtr m_Socket;
 
 		static int byte32_to_int(const char*);

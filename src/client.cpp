@@ -8,6 +8,7 @@
 #include <chrono>
 #include <cstring>
 #include <fcntl.h>
+#include <iomanip>
 #include <string.h>
 #include <sstream>
 #include <thread>
@@ -82,7 +83,7 @@ namespace srcon
 		std::string m_Body1;
 		std::string m_Body2;
 
-		std::vector<char> pack() const
+		std::vector<char> pack() const try
 		{
 			//using PacketHeader = RequestPacketHeader<true>;
 			const auto packetSizeActual = sizeof(header_type) + m_Body1.size() + 1 + m_Body2.size() + 1;
@@ -105,6 +106,11 @@ namespace srcon
 
 			assert(destPtr == (packet.data() + packet.size()));
 			return packet;
+		}
+		catch (const std::exception& e)
+		{
+			SRCON_STACK_TRACE(e);
+			throw;
 		}
 	};
 
@@ -132,6 +138,7 @@ struct srcon::client::SocketData
 {
 	uint32_t m_NextID = 1;
 
+	SocketData(srcon_addr addr, timeout_t timeout);
 	~SocketData()
 	{
 		if (m_Socket != INVALID_SOCKET)
@@ -151,7 +158,7 @@ struct srcon::client::SocketData
 		auto packet = packetTemp.pack();
 
 		if constexpr (SRCON_LOG_TX)
-			LOG('[' << packetTemp.m_ID << "] Sending: \"" << data << '"');
+			SRCON_LOG('[' << packetTemp.m_ID << "] Sending: \"" << data << '"');
 
 		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), int(packet.size()), 0);
 		if (sendResult < 0)
@@ -190,7 +197,7 @@ struct srcon::client::SocketData
 	}
 	catch (const std::exception& e)
 	{
-		LOG(__FUNCTION__ << "(): " << e.what());
+		SRCON_STACK_TRACE(e);
 		throw;
 	}
 
@@ -239,7 +246,7 @@ struct srcon::client::SocketData
 		packet.m_Body2 = body.substr(firstNullTerm + 1, secondNullTerm - (firstNullTerm + 1));
 
 		if constexpr (SRCON_LOG_RX)
-			LOG('[' << packet.m_ID << "] Receiving: " << packet.m_Body1);
+			SRCON_LOG('[' << packet.m_ID << "] Receiving: " << packet.m_Body1);
 
 		return packet;
 	}
@@ -277,7 +284,7 @@ static bool SetNonBlocking(SOCKET s, bool isNonBlocking)
 	u_long value = isNonBlocking ? 1 : 0;
 	if (auto ret = ioctlsocket(s, FIONBIO, &value); ret == SOCKET_ERROR)
 	{
-		LOG("Failed to change socket's non-blocking mode");
+		SRCON_LOG("Failed to change socket's non-blocking mode");
 		return false;
 	}
 #else
@@ -364,13 +371,14 @@ static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout) try
 }
 catch (const std::exception& e)
 {
-	LOG(__FUNCTION__ << "(): " << e.what());
+	SRCON_STACK_TRACE(e);
 	throw;
 }
 
-auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout) -> SocketDataPtr try
+srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t timeout) try
 {
-	LOG("Connecting to " << addr.addr << ':' << addr.port << "...");
+	SRCON_LOG("Password length: " << addr.pass.size());
+	SRCON_LOG("Connecting to " << addr.addr << ':' << addr.port << " with password " << std::quoted(addr.pass) << "...");
 
 #ifdef _WIN32
 	WSADATA wsaData{};
@@ -381,16 +389,14 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 	}
 #endif
 
-	auto retVal = SocketDataPtr(new SocketData());
-
-	retVal->m_Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
-	if (retVal->m_Socket == INVALID_SOCKET)
+	m_Socket = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+	if (m_Socket == INVALID_SOCKET)
 		throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "socket()");
 
-	LOG("Socket (" << retVal->m_Socket << ") opened, connecting...");
-	SetSocketTimeout(retVal->m_Socket, timeout);
+	SRCON_LOG("Socket (" << m_Socket << ") opened, connecting...");
+	SetSocketTimeout(m_Socket, timeout);
 
-	SetNonBlocking(retVal->m_Socket, true);
+	SetNonBlocking(m_Socket, true);
 	{
 		sockaddr_in server{};
 		server.sin_family = AF_INET;
@@ -398,7 +404,7 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 		server.sin_port = htons(addr.port);
 
 		int status = SOCKET_ERROR;
-		if ((status = ::connect(retVal->m_Socket, (struct sockaddr*)&server, sizeof(server))) == SOCKET_ERROR)
+		if ((status = ::connect(m_Socket, (struct sockaddr*)&server, sizeof(server))) == SOCKET_ERROR)
 		{
 			auto error = GetSocketError();
 			const auto msg = error.message();
@@ -406,11 +412,11 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 				throw srcon_error(srcon_errc::rcon_connect_failed, error, "connect()");
 		}
 	}
-	SetNonBlocking(retVal->m_Socket, false);
+	SetNonBlocking(m_Socket, false);
 
-	WaitForSocketConnection(retVal->m_Socket, timeout);
+	WaitForSocketConnection(m_Socket, timeout);
 
-	auto authResponses = retVal->send(addr.pass, RequestPacketType::SERVERDATA_AUTH);
+	auto authResponses = send(addr.pass, RequestPacketType::SERVERDATA_AUTH);
 
 	for (auto& response : authResponses)
 	{
@@ -421,29 +427,25 @@ auto srcon::client::ConnectImpl(const srcon_addr& addr, const timeout_t& timeout
 			throw srcon_error(srcon_errc::bad_rcon_password);
 	}
 
-	LOG("Connection established!");
-	return retVal;
+	SRCON_LOG("Connection established!");
 }
 catch (const std::exception& e)
 {
-	LOG(__FUNCTION__ << "(): " << e.what());
+	SRCON_STACK_TRACE(e);
 	throw;
 }
 
 void srcon::client::connect(srcon_addr addr, timeout_t timeout) try
 {
-	m_Socket.reset();
+	disconnect();
 
 	m_Address = std::move(addr);
 	m_Timeout = std::move(timeout);
-	m_Socket = ConnectImpl(m_Address, m_Timeout);
-
-	if (!m_Socket)
-		throw srcon_error(srcon_errc::rcon_connect_failed);
+	m_Socket = SocketDataPtr(new SocketData(m_Address, m_Timeout));
 }
 catch (const std::exception& e)
 {
-	LOG(__FUNCTION__ << "(): " << e.what());
+	SRCON_STACK_TRACE(e);
 	throw;
 }
 
@@ -488,7 +490,7 @@ std::string srcon::client::send_command(const std::string_view& data) try
 }
 catch (const std::exception& e)
 {
-	LOG(__FUNCTION__ << "(): " << e.what());
+	SRCON_STACK_TRACE(e);
 	throw;
 }
 

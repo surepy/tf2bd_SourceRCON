@@ -36,7 +36,7 @@ std::string async_client::ClientThreadData::send_command(const std::string_view&
 
 	if (!m_Client.is_connected())
 	{
-		LOG("client not connected, reconnecting for command " << std::quoted(command));
+		SRCON_LOG("client not connected, reconnecting for command " << std::quoted(command));
 		std::lock_guard lock2(m_AddressMutex);
 		m_Client.connect(m_Address);
 	}
@@ -45,7 +45,7 @@ std::string async_client::ClientThreadData::send_command(const std::string_view&
 }
 catch (const std::exception& e)
 {
-	LOG(__FUNCTION__ << "(): " << e.what());
+	SRCON_STACK_TRACE(e);
 	throw;
 }
 
@@ -105,7 +105,7 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 			}
 			catch (const std::exception& e)
 			{
-				LOG(__FUNCTION__ << "(): Unhandled exception: " << e.what());
+				SRCON_LOG("Unhandled exception: " << e.what() << ", disconnecting");
 				if (!cmd->m_Reliable)
 					cmd->m_Promise->set_exception(std::current_exception());
 
