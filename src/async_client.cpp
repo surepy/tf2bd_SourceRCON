@@ -8,8 +8,31 @@
 using namespace srcon;
 using namespace std::chrono_literals;
 
+#ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN 1
+#include <Windows.h>
+struct async_client::ThreadLangData
+{
+	ThreadLangData()
+	{
+		m_LangID = GetThreadUILanguage();
+	}
+
+	void Apply() const
+	{
+		if (auto result = SetThreadUILanguage(m_LangID); result != m_LangID)
+			SRCON_LOG("Failed to propagate thread LANGID " << m_LangID << " to child thread");
+	}
+
+	LANGID m_LangID;
+};
+#endif
+
 async_client::async_client()
 {
+#ifdef _WIN32
+	m_ClientThreadData->m_SpawningThreadLanguage = std::make_unique<ThreadLangData>();
+#endif
 }
 
 async_client::~async_client()
@@ -67,6 +90,10 @@ std::shared_future<std::string> async_client::send_command_async(std::string com
 
 void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 {
+#ifdef _WIN32
+	data->m_SpawningThreadLanguage->Apply();
+#endif
+
 	while (!data->m_IsCancelled)
 	{
 		std::this_thread::sleep_for(250ms);

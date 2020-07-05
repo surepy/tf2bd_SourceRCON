@@ -2,6 +2,9 @@
 
 #include "client.h"
 
+#ifdef _WIN32
+#include <any>
+#endif
 #include <future>
 #include <memory>
 #include <mutex>
@@ -35,6 +38,10 @@ namespace srcon
 			std::shared_future<std::string> m_Future{ m_Promise.get_future().share() };
 		};
 
+#ifdef _WIN32
+		struct ThreadLangData;
+#endif
+
 		struct ClientThreadData
 		{
 			std::string send_command(const std::string_view& command);
@@ -48,6 +55,10 @@ namespace srcon
 			srcon_addr m_Address;
 			mutable std::mutex m_AddressMutex;
 			bool m_IsCancelled = false;
+
+#ifdef _WIN32
+			std::unique_ptr<ThreadLangData> m_SpawningThreadLanguage;
+#endif
 		};
 		std::shared_ptr<ClientThreadData> m_ClientThreadData{ std::make_shared<ClientThreadData>() };
 		std::thread m_ClientThread{ &ClientThreadFunc, m_ClientThreadData };
