@@ -215,7 +215,7 @@ struct srcon::client::SocketData
 		if (auto result = ::recv(m_Socket, buffer, 4, 0); result != 4)
 		{
 			std::stringstream ss;
-			ss << ": actual received size was " << result;
+			ss << "actual received size was " << result;
 			throw srcon_error(srcon_errc::socket_recv_failed, GetSocketError(), ss.str());
 		}
 
