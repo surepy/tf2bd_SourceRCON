@@ -3,6 +3,7 @@
 #include "client.h"
 
 #include <future>
+#include <memory>
 #include <mutex>
 #include <queue>
 #include <string_view>
@@ -30,8 +31,8 @@ namespace srcon
 
 			std::string m_Command;
 			bool m_Reliable = true;
-			std::shared_ptr<std::promise<std::string>> m_Promise{ std::make_shared<std::promise<std::string>>() };
-			std::shared_future<std::string> m_Future{ m_Promise->get_future().share() };
+			std::promise<std::string> m_Promise;
+			std::shared_future<std::string> m_Future{ m_Promise.get_future().share() };
 		};
 
 		struct ClientThreadData
@@ -41,7 +42,7 @@ namespace srcon
 			client m_Client;
 			mutable std::mutex m_ClientMutex;
 
-			std::queue<RCONCommand> m_Commands;
+			std::queue<std::shared_ptr<RCONCommand>> m_Commands;
 			mutable std::mutex m_CommandsMutex;
 
 			srcon_addr m_Address;

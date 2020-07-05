@@ -49,15 +49,20 @@ catch (const std::exception& e)
 	throw;
 }
 
-std::string async_client::send_command(const std::string_view& command)
+std::string async_client::send_command(const std::string_view& command) try
 {
 	return m_ClientThreadData->send_command(command);
+}
+catch (const std::exception& e)
+{
+	SRCON_STACK_TRACE(e);
+	throw;
 }
 
 std::shared_future<std::string> async_client::send_command_async(std::string command, bool reliable)
 {
 	std::lock_guard lock(m_ClientThreadData->m_CommandsMutex);
-	return m_ClientThreadData->m_Commands.emplace(std::move(command), reliable).m_Future;
+	return m_ClientThreadData->m_Commands.emplace(std::make_shared<RCONCommand>(std::move(command), reliable))->m_Future;
 }
 
 void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
@@ -68,29 +73,25 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 
 		while (!data->m_Commands.empty() && !data->m_IsCancelled)
 		{
-			std::optional<RCONCommand> cmd;
+			std::shared_ptr<RCONCommand> cmd;
 			{
 				std::lock_guard lock(data->m_CommandsMutex);
 				if (data->m_Commands.empty())
 					break;
 
-				auto& front = data->m_Commands.front();
-				if (!front.m_Reliable)
-				{
-					cmd = std::move(front);
+				cmd = data->m_Commands.front();
+				if (!cmd->m_Reliable)
 					data->m_Commands.pop();
-				}
-				else
-				{
-					cmd = front;
-				}
 			}
 
 			try
 			{
+				if (cmd->m_Command.size() > 4096)
+					SRCON_LOG("Sending a command that is " << cmd->m_Command.size() << " chars long, was this really intended?");
+
 				auto resultStr = data->send_command(cmd->m_Command);
 				//DebugLog("Setting promise for "s << std::quoted(cmd->m_Command) << " to " << std::quoted(resultStr));
-				cmd->m_Promise->set_value(resultStr);
+				cmd->m_Promise.set_value(resultStr);
 
 				if (cmd->m_Reliable)
 				{
@@ -107,7 +108,7 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 			{
 				SRCON_LOG("Unhandled exception: " << e.what() << ", disconnecting");
 				if (!cmd->m_Reliable)
-					cmd->m_Promise->set_exception(std::current_exception());
+					cmd->m_Promise.set_exception(std::current_exception());
 
 				{
 					std::lock_guard lock(data->m_ClientMutex);
