@@ -153,7 +153,15 @@ struct srcon::client::SocketData
 		RequestPacket packetTemp;
 		packetTemp.m_Type = type;
 		packetTemp.m_ID = m_NextID++;
-		packetTemp.m_Body1 = data;
+		try
+		{
+			packetTemp.m_Body1 = data;
+		}
+		catch (const std::exception& e)
+		{
+			SRCON_STACK_TRACE(e);
+			throw;
+		}
 
 		auto packet = packetTemp.pack();
 
@@ -201,14 +209,25 @@ struct srcon::client::SocketData
 		throw;
 	}
 
-	PacketSize_t read_packet_len() const
+	PacketSize_t read_packet_len() const try
 	{
 		char buffer[4]{};
-		::recv(m_Socket, buffer, 4, 0);
+		if (auto result = ::recv(m_Socket, buffer, 4, 0); result != 4)
+		{
+			std::stringstream ss;
+			ss << ": actual received size was " << result;
+			throw srcon_error(srcon_errc::socket_recv_failed, GetSocketError(), ss.str());
+		}
+
 		return byte32_to_int(buffer);
 	}
+	catch (const std::exception& e)
+	{
+		SRCON_STACK_TRACE(e);
+		throw;
+	}
 
-	ResponsePacket read_packet() const
+	ResponsePacket read_packet() const try
 	{
 		ResponsePacket packet;
 		const auto len = read_packet_len();
@@ -236,6 +255,13 @@ struct srcon::client::SocketData
 		packet.m_ID = header.m_ID;
 		packet.m_Type = header.m_Type;
 
+		if (len < sizeof(PacketHeaderNoSize))
+		{
+			std::stringstream ss;
+			ss << "Reported packet length was " << len;
+			throw std::length_error(ss.str());
+		}
+
 		auto body = std::string_view(&buffer.get()[sizeof(PacketHeaderNoSize)],
 			len - sizeof(PacketHeaderNoSize));
 
@@ -250,8 +276,13 @@ struct srcon::client::SocketData
 
 		return packet;
 	}
+	catch (const std::exception& e)
+	{
+		SRCON_STACK_TRACE(e);
+		throw;
+	}
 
-	std::vector<ResponsePacket> recv(PacketID_t halt_id) const
+	std::vector<ResponsePacket> recv(PacketID_t halt_id) const try
 	{
 		std::vector<ResponsePacket> responses;
 		while (1)
@@ -265,6 +296,11 @@ struct srcon::client::SocketData
 
 		//auto packet2 = read_packet();
 		return responses;
+	}
+	catch (const std::exception& e)
+	{
+		SRCON_STACK_TRACE(e);
+		throw;
 	}
 };
 
@@ -312,7 +348,7 @@ static timeval ToTimeval(srcon::timeout_t dur)
 	return timeoutVal;
 }
 
-static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
+static void SetSocketTimeout(SOCKET s, srcon::timeout_t time) try
 {
 #ifdef _WIN32
 	using namespace std::chrono;
@@ -332,6 +368,11 @@ static void SetSocketTimeout(SOCKET s, srcon::timeout_t time)
 	{
 		throw srcon::srcon_error(srcon::srcon_errc::rcon_connect_failed, GetSocketError(), "SO_SNDTIMEO");
 	}
+}
+catch (const std::exception& e)
+{
+	SRCON_STACK_TRACE(e);
+	throw;
 }
 
 static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout) try
@@ -458,13 +499,18 @@ void srcon::client::connect(std::string address, std::string password, int port,
 	connect(std::move(addr), timeout);
 }
 
-void srcon::client::reconnect()
+void srcon::client::reconnect() try
 {
 	if (m_Address.addr.empty() || m_Address.port <= 0)
 		throw srcon_error(srcon_errc::no_preexisting_connection, {}, __FUNCTION__);
 
 	disconnect();
 	return connect(m_Address, m_Timeout);
+}
+catch (const std::exception& e)
+{
+	SRCON_STACK_TRACE(e);
+	throw;
 }
 
 void srcon::client::disconnect()
