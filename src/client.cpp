@@ -255,7 +255,7 @@ struct srcon::client::SocketData
 		packet.m_ID = header.m_ID;
 		packet.m_Type = header.m_Type;
 
-		if (len < sizeof(PacketHeaderNoSize))
+		if (len < PacketSize_t(sizeof(PacketHeaderNoSize)))
 		{
 			std::stringstream ss;
 			ss << "Reported packet length was " << len;
