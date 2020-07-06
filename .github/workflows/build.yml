@@ -13,8 +13,7 @@ jobs:
     steps:
     - name: Checkout
       uses: actions/checkout@v2
-    - name: Add msbuild to PATH
-      uses: microsoft/setup-msbuild@v1.0.0
+
     - name: run-cmake
       env:
         CXXFLAGS: /WX
@@ -29,16 +28,29 @@ jobs:
     #     cmakeAppendedArgs: '-G "Visual Studio 16 2019" -A${{ matrix.buildArch }} -D CMAKE_CXX_FLAGS=/WX'
     #     cmakeBuildType: ${{ matrix.buildType }}
 
+
+
   build-linux:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
+        os: ["ubuntu-18.04"]
         buildType: ["Debug", "Release"]
-        buildCompiler: ["g++-9", "clang++-9"]
+        buildCompiler: ["g++-9", "clang++-9", "clang++-10"]
     steps:
     - name: Checkout
       uses: actions/checkout@v2
+    - name: Add sources
+      run: |
+        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+        echo "deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" | sudo tee /etc/apt/sources.list.d/llvm.list
+
+    - name: Install Compiler
+      run: |
+        sudo apt update
+        sudo apt install ${{ matrix.buildCompiler }}
+
     - name: run-cmake
       env:
         CXX: ${{ matrix.buildCompiler }}
@@ -48,6 +60,8 @@ jobs:
         cd cmake_out
         cmake -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} ../
         cmake --build .
+
+
 
   build-macos:
     runs-on: macos-latest
