@@ -85,7 +85,9 @@ catch (const std::exception& e)
 std::shared_future<std::string> async_client::send_command_async(std::string command, bool reliable)
 {
 	std::lock_guard lock(m_ClientThreadData->m_CommandsMutex);
-	return m_ClientThreadData->m_Commands.emplace(std::make_shared<RCONCommand>(std::move(command), reliable))->m_Future;
+	auto retVal = m_ClientThreadData->m_Commands.emplace(std::make_shared<RCONCommand>(std::move(command), reliable))->m_Future;
+	m_ClientThreadData->m_CommandsCV.notify_one();
+	return retVal;
 }
 
 void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
@@ -96,7 +98,10 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 
 	while (!data->m_IsCancelled)
 	{
-		std::this_thread::sleep_for(250ms);
+		{
+			std::unique_lock lock(data->m_CommandsMutex);
+			data->m_CommandsCV.wait_for(lock, 1s);
+		}
 
 		while (!data->m_Commands.empty() && !data->m_IsCancelled)
 		{

@@ -2,9 +2,7 @@
 
 #include "client.h"
 
-#ifdef _WIN32
-#include <any>
-#endif
+#include <condition_variable>
 #include <future>
 #include <memory>
 #include <mutex>
@@ -51,6 +49,7 @@ namespace srcon
 
 			std::queue<std::shared_ptr<RCONCommand>> m_Commands;
 			mutable std::mutex m_CommandsMutex;
+			std::condition_variable m_CommandsCV;
 
 			srcon_addr m_Address;
 			mutable std::mutex m_AddressMutex;
