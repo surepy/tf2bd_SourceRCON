@@ -63,6 +63,10 @@ namespace srcon
 		bool is_connected() const { return !!m_Socket; }
 		const srcon_addr& get_addr() const { return m_Address; }
 
+		void set_logging(bool txEnabled, bool rxEnabled);
+		bool is_logging_tx() const { return m_LogSettings->m_IsLoggingTX; }
+		bool is_logging_rx() const { return m_LogSettings->m_IsLoggingRX; }
+
 	private:
 		struct SocketData;
 		struct SocketDataDeleter
@@ -71,8 +75,14 @@ namespace srcon
 		};
 
 		using SocketDataPtr = std::unique_ptr<SocketData, SocketDataDeleter>;
-
 		SocketDataPtr m_Socket;
+
+		struct LogSettings
+		{
+			bool m_IsLoggingTX = false;
+			bool m_IsLoggingRX = false;
+		};
+		std::shared_ptr<LogSettings> m_LogSettings = std::make_shared<LogSettings>();
 
 		static int byte32_to_int(const char*);
 	};

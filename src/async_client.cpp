@@ -157,3 +157,18 @@ async_client::RCONCommand::RCONCommand(std::string cmd, bool reliable) :
 	m_Command(std::move(cmd)), m_Reliable(reliable)
 {
 }
+
+void async_client::set_logging(bool txEnabled, bool rxEnabled)
+{
+	m_ClientThreadData->m_Client.set_logging(txEnabled, rxEnabled);
+}
+
+bool async_client::is_logging_tx() const
+{
+	return m_ClientThreadData->m_Client.is_logging_tx();
+}
+
+bool async_client::is_logging_rx() const
+{
+	return m_ClientThreadData->m_Client.is_logging_rx();
+}

@@ -23,6 +23,10 @@ namespace srcon
 		std::string send_command(const std::string_view& command);
 		std::shared_future<std::string> send_command_async(std::string command, bool reliable = true);
 
+		void set_logging(bool txEnabled, bool rxEnabled);
+		bool is_logging_tx() const;
+		bool is_logging_rx() const;
+
 	private:
 		struct RCONCommand
 		{

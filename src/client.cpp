@@ -28,9 +28,6 @@
 	static constexpr int INVALID_SOCKET = -1;
 #endif
 
-static constexpr bool SRCON_LOG_TX = false;
-static constexpr bool SRCON_LOG_RX = false;
-
 static std::error_code MakeSocketError(int errc)
 {
 #ifdef _WIN32
@@ -137,8 +134,9 @@ namespace srcon
 struct srcon::client::SocketData
 {
 	uint32_t m_NextID = 1;
+	std::shared_ptr<LogSettings> m_LogSettings;
 
-	SocketData(srcon_addr addr, timeout_t timeout);
+	SocketData(srcon_addr addr, timeout_t timeout, const std::shared_ptr<LogSettings>& logSettings);
 	~SocketData()
 	{
 		if (m_Socket != INVALID_SOCKET)
@@ -165,8 +163,8 @@ struct srcon::client::SocketData
 
 		auto packet = packetTemp.pack();
 
-		if constexpr (SRCON_LOG_TX)
-			SRCON_LOG('[' << packetTemp.m_ID << "] Sending: \"" << data << '"');
+		if (m_LogSettings->m_IsLoggingTX)
+			SRCON_LOG('[' << packetTemp.m_ID << "] Sending: " << std::quoted(data));
 
 		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), int(packet.size()), 0);
 		if (sendResult < 0)
@@ -271,8 +269,8 @@ struct srcon::client::SocketData
 		auto secondNullTerm = body.rfind('\0');
 		packet.m_Body2 = body.substr(firstNullTerm + 1, secondNullTerm - (firstNullTerm + 1));
 
-		if constexpr (SRCON_LOG_RX)
-			SRCON_LOG('[' << packet.m_ID << "] Receiving: " << packet.m_Body1);
+		if (m_LogSettings->m_IsLoggingRX)
+			SRCON_LOG('[' << packet.m_ID << "] Receiving: " << std::quoted(packet.m_Body1) << ", " << std::quoted(packet.m_Body2));
 
 		return packet;
 	}
@@ -416,8 +414,10 @@ catch (const std::exception& e)
 	throw;
 }
 
-srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t timeout) try
+srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t timeout, const std::shared_ptr<LogSettings>& logSettings) try
 {
+	m_LogSettings = logSettings;
+
 	SRCON_LOG("Password length: " << addr.pass.size());
 	SRCON_LOG("Connecting to " << addr.addr << ':' << addr.port << " with password " << std::quoted(addr.pass) << "...");
 
@@ -482,7 +482,7 @@ void srcon::client::connect(srcon_addr addr, timeout_t timeout) try
 
 	m_Address = std::move(addr);
 	m_Timeout = std::move(timeout);
-	m_Socket = SocketDataPtr(new SocketData(m_Address, m_Timeout));
+	m_Socket = SocketDataPtr(new SocketData(m_Address, m_Timeout, m_LogSettings));
 }
 catch (const std::exception& e)
 {
@@ -547,4 +547,10 @@ int srcon::client::byte32_to_int(const char* buffer)
 		static_cast<unsigned char>(buffer[1]) << 8 |
 		static_cast<unsigned char>(buffer[2]) << 16 |
 		static_cast<unsigned char>(buffer[3]) << 24);
+}
+
+void srcon::client::set_logging(bool txEnabled, bool rxEnabled)
+{
+	m_LogSettings->m_IsLoggingTX = txEnabled;
+	m_LogSettings->m_IsLoggingRX = rxEnabled;
 }
