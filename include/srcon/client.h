@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <memory>
+#include <ostream>
 #include <string>
 #include <string_view>
 
@@ -86,4 +87,48 @@ namespace srcon
 
 		static int byte32_to_int(const char*);
 	};
+}
+
+template<typename CharT, typename Traits>
+std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const srcon::RequestPacketType& type)
+{
+#undef OS_CASE
+#define OS_CASE(v) case v : return os << #v
+	switch (type)
+	{
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_REQUESTVALUE);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_SETVALUE);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_EXECCOMMAND);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_AUTH);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_VPROF);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_REMOVE_VPROF);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_TAKE_SCREENSHOT);
+		OS_CASE(srcon::RequestPacketType::SERVERDATA_SEND_CONSOLE_LOG);
+
+	default:
+		return os << "srcon::RequestPacketType(" << +std::underlying_type_t<srcon::RequestPacketType>(type) << ')';
+	}
+#undef OS_CASE
+}
+
+template<typename CharT, typename Traits>
+std::basic_ostream<CharT, Traits>& operator<<(std::basic_ostream<CharT, Traits>& os, const srcon::ResponsePacketType& type)
+{
+#undef OS_CASE
+#define OS_CASE(v) case v : return os << #v
+	switch (type)
+	{
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_RESPONSE_VALUE);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_UPDATE);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_AUTH_RESPONSE);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_VPROF_DATA);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_VPROF_GROUPS);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_SCREENSHOT_RESPONSE);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_CONSOLE_LOG_RESPONSE);
+		OS_CASE(srcon::ResponsePacketType::SERVERDATA_RESPONSE_STRING);
+
+	default:
+		return os << "srcon::ResponsePacketType(" << +std::underlying_type_t<srcon::ResponsePacketType>(type) << ')';
+	}
+#undef OS_CASE
 }

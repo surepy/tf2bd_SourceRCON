@@ -164,7 +164,7 @@ struct srcon::client::SocketData
 		auto packet = packetTemp.pack();
 
 		if (m_LogSettings->m_IsLoggingTX)
-			SRCON_LOG('[' << packetTemp.m_ID << "] Sending: " << std::quoted(data));
+			SRCON_LOG('[' << packetTemp.m_ID << "] Sending " << packetTemp.m_Type << ": " << std::quoted(data));
 
 		const auto sendResult = ::send(m_Socket, reinterpret_cast<const char*>(packet.data()), int(packet.size()), 0);
 		if (sendResult < 0)
@@ -270,7 +270,7 @@ struct srcon::client::SocketData
 		packet.m_Body2 = body.substr(firstNullTerm + 1, secondNullTerm - (firstNullTerm + 1));
 
 		if (m_LogSettings->m_IsLoggingRX)
-			SRCON_LOG('[' << packet.m_ID << "] Receiving: " << std::quoted(packet.m_Body1) << ", " << std::quoted(packet.m_Body2));
+			SRCON_LOG('[' << packet.m_ID << "] Receiving " << packet.m_Type << ": " << std::quoted(packet.m_Body1) << ", " << std::quoted(packet.m_Body2));
 
 		return packet;
 	}
