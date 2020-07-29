@@ -27,6 +27,10 @@ namespace srcon
 		bool is_logging_tx() const;
 		bool is_logging_rx() const;
 
+		// Minimum delay between issuing commands to server.
+		void set_min_delay(const std::chrono::steady_clock::duration& duration);
+		std::chrono::steady_clock::duration get_min_delay() const { return m_ClientThreadData->m_MinDelay; }
+
 	private:
 		struct RCONCommand
 		{
@@ -58,6 +62,8 @@ namespace srcon
 			srcon_addr m_Address;
 			mutable std::mutex m_AddressMutex;
 			bool m_IsCancelled = false;
+
+			std::chrono::steady_clock::duration m_MinDelay = std::chrono::milliseconds(150);
 
 #ifdef _WIN32
 			std::unique_ptr<ThreadLangData> m_SpawningThreadLanguage;
