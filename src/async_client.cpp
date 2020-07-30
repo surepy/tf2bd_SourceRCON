@@ -37,7 +37,6 @@ async_client::async_client()
 
 async_client::~async_client()
 {
-	m_ClientThreadData->m_IsCancelled = true;
 	m_ClientThread.detach();
 }
 
@@ -96,14 +95,14 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 	data->m_SpawningThreadLanguage->Apply();
 #endif
 
-	while (!data->m_IsCancelled)
+	while (data.use_count() > 1)
 	{
 		{
 			std::unique_lock lock(data->m_CommandsMutex);
 			data->m_CommandsCV.wait_for(lock, 1s);
 		}
 
-		while (!data->m_Commands.empty() && !data->m_IsCancelled)
+		while (!data->m_Commands.empty() && data.use_count() > 1)
 		{
 			std::shared_ptr<RCONCommand> cmd;
 			{

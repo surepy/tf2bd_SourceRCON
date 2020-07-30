@@ -61,7 +61,6 @@ namespace srcon
 
 			srcon_addr m_Address;
 			mutable std::mutex m_AddressMutex;
-			bool m_IsCancelled = false;
 
 			std::chrono::steady_clock::duration m_MinDelay = std::chrono::milliseconds(150);
 
