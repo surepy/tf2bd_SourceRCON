@@ -17,6 +17,9 @@ namespace srcon
 		async_client();
 		~async_client();
 
+		async_client(const async_client&) = delete;
+		async_client& operator=(const async_client&) = delete;
+
 		srcon_addr get_addr() const;
 		void set_addr(srcon_addr addr);
 
