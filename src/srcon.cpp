@@ -63,13 +63,8 @@ srcon::srcon_error::srcon_error(srcon_errc errc, std::error_code innerErrorCode,
 	m_Message = ss.str();
 }
 
-srcon::srcon_error::srcon_error(srcon_errc errc, std::error_code innerErrorCode, const char* detail) :
-	srcon_error(std::move(errc), std::move(innerErrorCode), std::string(detail))
-{
-}
-
-srcon::srcon_error::srcon_error(srcon_errc errc, const char* detail) :
-	srcon_error(std::move(errc), {}, detail)
+srcon::srcon_error::srcon_error(srcon_errc errc, std::string detail) :
+	srcon_error(std::move(errc), {}, std::move(detail))
 {
 }
 
