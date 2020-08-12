@@ -159,6 +159,11 @@ async_client::RCONCommand::RCONCommand(std::string cmd, bool reliable) :
 {
 }
 
+void async_client::set_logging(bool enabled)
+{
+	set_logging(enabled, enabled);
+}
+
 void async_client::set_logging(bool txEnabled, bool rxEnabled)
 {
 	m_ClientThreadData->m_Client.set_logging(txEnabled, rxEnabled);
