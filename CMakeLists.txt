@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(SourceRCON)
 
-add_library(SourceRCON
+add_library(SourceRCON STATIC
 	"include/srcon/client.h"
 	"src/client.cpp"
 	"include/srcon/async_client.h"
@@ -15,6 +15,10 @@ add_library(SourceRCON
 set_property(TARGET SourceRCON PROPERTY CXX_STANDARD 17)
 
 target_include_directories(SourceRCON PUBLIC include)
+
+if (WIN32)
+	target_link_libraries(SourceRCON PRIVATE ws2_32)
+endif()
 
 option(SourceRCON_WARNINGS_AS_ERRORS "Treat compile warnings as errors." off)
 if (SourceRCON_WARNINGS_AS_ERRORS)
