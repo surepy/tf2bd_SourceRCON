@@ -2,6 +2,10 @@ name: build
 
 on: [push]
 
+env:
+  VCPKG_BINARY_SOURCES: 'clear;nuget,GitHub,readwrite'
+  VCPKG_FEATURE_FLAGS: manifests,binarycaching,registries
+
 jobs:
   build-windows:
     runs-on: windows-latest
@@ -21,6 +25,9 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: lukka/run-vcpkg@v7.1
+      with:
+        setupOnly: true
 
     - name: run-cmake
       env:
@@ -29,6 +36,12 @@ jobs:
         mkdir cmake_out
         cd cmake_out
         cmake -A${{ matrix.buildArch }} ../
+
+        cmake \
+          -A${{ matrix.buildArch }} \
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+          ../
+
         cmake --build . --config ${{ matrix.buildType }}
     # - name: run-cmake
     #   uses: lukka/run-cmake@v2.5
@@ -64,6 +77,9 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: lukka/run-vcpkg@v7.1
+      with:
+        setupOnly: true
 
     - name: Add repos
       run: |
@@ -81,7 +97,12 @@ jobs:
       run: |
         mkdir cmake_out
         cd cmake_out
-        cmake -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} ../
+
+        cmake \
+          -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+          ../
+
         cmake --build .
 
 
@@ -104,6 +125,9 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: lukka/run-vcpkg@v7.1
+      with:
+        setupOnly: true
 
     - name: run-cmake
       env:
@@ -111,5 +135,10 @@ jobs:
       run: |
         mkdir cmake_out
         cd cmake_out
-        cmake -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} ../
+
+        cmake \
+          -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
+          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+          ../
+
         cmake --build .
