@@ -87,7 +87,6 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
-    - uses: seanmiddleditch/gha-setup-ninja@v3
     - uses: lukka/run-vcpkg@v7.1
       with:
         setupOnly: true
@@ -100,7 +99,7 @@ jobs:
         echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt update
 
-    - run: sudo apt install ${{ matrix.buildCompiler.deps }}
+    - run: sudo apt install ${{ matrix.buildCompiler.deps }} ninja-build
 
     - name: run-cmake
       env:
