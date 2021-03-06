@@ -118,6 +118,7 @@ jobs:
         cmake --build .
 
     - name: "[Temp] Print logs of failing fmt dbg build"
+      if: ${{ always() }}
       run: |
         cat /home/runner/work/SourceRCON/SourceRCON/vcpkg/buildtrees/fmt/install-x64-linux-dbg-out.log
 
