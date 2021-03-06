@@ -49,7 +49,6 @@ jobs:
         cd cmake_out
 
         cmake -G Ninja \
-          -A${{ matrix.buildArch }} \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
 
