@@ -44,12 +44,13 @@ jobs:
     - name: run-cmake
       env:
         CXXFLAGS: //WX
+        CMAKE_TOOLCHAIN_FILE: ${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake
       run: |
         mkdir cmake_out
         cd cmake_out
 
         cmake -G Ninja \
-          -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
+          -DCMAKE_TOOLCHAIN_FILE="${CMAKE_TOOLCHAIN_FILE}" \
           ../
 
         cmake --build . --config ${{ matrix.buildType }}
