@@ -30,6 +30,7 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: seanmiddleditch/gha-setup-ninja@v3
     - uses: lukka/run-vcpkg@v7.1
       with:
         setupOnly: true
@@ -43,7 +44,7 @@ jobs:
         cd cmake_out
         cmake -A${{ matrix.buildArch }} ../
 
-        cmake \
+        cmake -G Ninja \
           -A${{ matrix.buildArch }} \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
@@ -83,6 +84,7 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: seanmiddleditch/gha-setup-ninja@v3
     - uses: lukka/run-vcpkg@v7.1
       with:
         setupOnly: true
@@ -100,12 +102,13 @@ jobs:
     - name: run-cmake
       env:
         CXX: ${{ matrix.buildCompiler.exe }}
+        CMAKE_CXX_COMPILER: ${{ matrix.buildCompiler.exe }}
         CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
       run: |
         mkdir cmake_out
         cd cmake_out
 
-        cmake \
+        cmake -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
@@ -132,6 +135,7 @@ jobs:
         -name "GitHub"
         -username "${{ github.repository_owner }}"
         -password "${{ secrets.GITHUB_TOKEN }}"
+    - uses: seanmiddleditch/gha-setup-ninja@v3
     - uses: lukka/run-vcpkg@v7.1
       with:
         setupOnly: true
@@ -144,7 +148,7 @@ jobs:
         mkdir cmake_out
         cd cmake_out
 
-        cmake \
+        cmake -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
