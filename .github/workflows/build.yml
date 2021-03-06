@@ -7,6 +7,10 @@ env:
   VCPKG_FEATURE_FLAGS: manifests,binarycaching,registries
   VCPKG_GIT_REF: c47216ac7904b09187c119c7e4d010dcf993e3d5
 
+defaults:
+  run:
+    shell: bash
+
 jobs:
   build-windows:
     runs-on: windows-latest
