@@ -36,6 +36,11 @@ jobs:
         setupOnly: true
         vcpkgGitCommitId: ${{ env.VCPKG_GIT_REF }}
 
+    - name: Configure build tools
+      uses: ilammy/msvc-dev-cmd@v1.5.0
+      with:
+        arch: ${{ matrix.buildArch }}
+
     - name: run-cmake
       env:
         CXXFLAGS: '/WX'
