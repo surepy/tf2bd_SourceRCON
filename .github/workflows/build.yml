@@ -38,7 +38,7 @@ jobs:
 
     - name: run-cmake
       env:
-        CXXFLAGS: /WX
+        CXXFLAGS: '/WX'
       run: |
         mkdir cmake_out
         cd cmake_out
