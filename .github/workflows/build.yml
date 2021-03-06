@@ -11,8 +11,16 @@ jobs:
         buildType: ["Debug", "Release"]
         buildArch: ["Win32", "x64"]
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v2
+
+    - name: Setup NuGet Credentials
+      run: >
+        nuget sources add
+        -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+        -storepasswordincleartext
+        -name "GitHub"
+        -username "${{ github.repository_owner }}"
+        -password "${{ secrets.GITHUB_TOKEN }}"
 
     - name: run-cmake
       env:
@@ -35,21 +43,30 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: ["ubuntu-18.04"]
+        os: [ubuntu-latest]
         buildType: ["Debug", "Release"]
         buildCompiler: ["g++-9", "clang++-9", "clang++-10"]
-    steps:
-    - name: Checkout
-      uses: actions/checkout@v2
-    - name: Add sources
-      run: |
-        echo "deb http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" | sudo tee /etc/apt/sources.list.d/llvm.list
-        echo "deb-src http://apt.llvm.org/bionic/ llvm-toolchain-bionic-10 main" | sudo tee /etc/apt/sources.list.d/llvm.list
 
-    - name: Install Compiler
+    steps:
+    - uses: actions/checkout@v2
+
+    - name: Setup NuGet Credentials
+      run: >
+        nuget sources add
+        -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+        -storepasswordincleartext
+        -name "GitHub"
+        -username "${{ github.repository_owner }}"
+        -password "${{ secrets.GITHUB_TOKEN }}"
+
+    - name: Add repos
       run: |
+        sudo apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 15CF4D18AF4F7421
+        sudo add-apt-repository ppa:ubuntu-toolchain-r/test
+        echo "deb http://apt.llvm.org/focal/ llvm-toolchain-focal main" | sudo tee /etc/apt/sources.list.d/llvm.list
         sudo apt update
-        sudo apt install ${{ matrix.buildCompiler }}
+
+    - run: sudo apt install ${{ matrix.buildCompiler }}
 
     - name: run-cmake
       env:
@@ -69,9 +86,19 @@ jobs:
       fail-fast: false
       matrix:
         buildType: ["Debug", "Release"]
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+    - uses: actions/checkout@v2
+
+    - name: Setup NuGet Credentials
+      run: >
+        nuget sources add
+        -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
+        -storepasswordincleartext
+        -name "GitHub"
+        -username "${{ github.repository_owner }}"
+        -password "${{ secrets.GITHUB_TOKEN }}"
+
     - name: run-cmake
       env:
         CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
