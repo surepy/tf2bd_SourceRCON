@@ -30,9 +30,6 @@ struct async_client::ThreadLangData
 
 async_client::async_client()
 {
-#ifdef _WIN32
-	m_ClientThreadData->m_SpawningThreadLanguage = std::make_unique<ThreadLangData>();
-#endif
 }
 
 async_client::~async_client()

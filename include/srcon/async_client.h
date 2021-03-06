@@ -69,7 +69,7 @@ namespace srcon
 			std::chrono::steady_clock::duration m_MinDelay = std::chrono::milliseconds(150);
 
 #ifdef _WIN32
-			std::unique_ptr<ThreadLangData> m_SpawningThreadLanguage;
+			std::unique_ptr<ThreadLangData> m_SpawningThreadLanguage = std::make_unique<ThreadLangData>();
 #endif
 		};
 		std::shared_ptr<ClientThreadData> m_ClientThreadData{ std::make_shared<ClientThreadData>() };
