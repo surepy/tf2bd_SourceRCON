@@ -112,6 +112,7 @@ jobs:
         cmake -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
           -DSourceRCON_WARNINGS_AS_ERRORS=ON \
+          -DVCPKG_INSTALL_OPTIONS=--debug \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
 
