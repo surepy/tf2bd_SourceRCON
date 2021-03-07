@@ -42,13 +42,12 @@ jobs:
         arch: ${{ matrix.buildArch }}
 
     - name: run-cmake
-      env:
-        CXXFLAGS: //WX
       run: |
         mkdir cmake_out
         cd cmake_out
 
         cmake -G Ninja \
+          -DSourceRCON_WARNINGS_AS_ERRORS=ON \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
 
@@ -105,13 +104,14 @@ jobs:
       env:
         CXX: ${{ matrix.buildCompiler.exe }}
         CMAKE_CXX_COMPILER: ${{ matrix.buildCompiler.exe }}
-        CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
+        CXXFLAGS: -Wall -Wpedantic -Wextra
       run: |
         mkdir cmake_out
         cd cmake_out
 
         cmake -G Ninja \
           -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
+          -DSourceRCON_WARNINGS_AS_ERRORS=ON \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
 
@@ -154,12 +154,13 @@ jobs:
 
     - name: run-cmake
       env:
-        CXXFLAGS: -Werror -Wall -Wpedantic -Wextra
+        CXXFLAGS: -Wall -Wpedantic -Wextra
       run: |
         mkdir cmake_out
         cd cmake_out
 
         cmake -G Ninja \
+          -DSourceRCON_WARNINGS_AS_ERRORS=ON \
           -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
           -DCMAKE_TOOLCHAIN_FILE="${{ env.VCPKG_ROOT }}/scripts/buildsystems/vcpkg.cmake" \
           ../
