@@ -122,6 +122,11 @@ jobs:
       run: |
         cat /home/runner/work/SourceRCON/SourceRCON/vcpkg/buildtrees/fmt/install-x64-linux-dbg-out.log
 
+    - name: "[Temp] Print weird af format.h"
+      if: ${{ always() }}
+      run: |
+        cat /home/runner/work/SourceRCON/SourceRCON/vcpkg/buildtrees/fmt/src/2b3b374f0b-8ea71ee8ea.clean/include/fmt/format.h
+
 
   build-macos:
     runs-on: macos-latest
