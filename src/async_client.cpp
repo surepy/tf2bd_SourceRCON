@@ -2,11 +2,47 @@
 #include "srcon_internal.h"
 
 #include <cassert>
+#include <condition_variable>
 #include <iomanip>
+#include <mutex>
 #include <optional>
+#include <queue>
 
 using namespace srcon;
 using namespace std::chrono_literals;
+
+struct async_client::ClientThreadData
+{
+	std::string send_command(const std::string_view& command);
+
+	client m_Client;
+	mutable std::mutex m_ClientMutex;
+
+	std::queue<std::shared_ptr<RCONCommand>> m_Commands;
+	mutable std::mutex m_CommandsMutex;
+	std::condition_variable m_CommandsCV;
+
+	srcon_addr m_Address;
+	mutable std::mutex m_AddressMutex;
+
+	std::chrono::steady_clock::duration m_MinDelay = std::chrono::milliseconds(150);
+
+#ifdef _WIN32
+	std::unique_ptr<ThreadLangData> m_SpawningThreadLanguage = std::make_unique<ThreadLangData>();
+#endif
+};
+
+struct async_client::RCONCommand
+{
+	explicit RCONCommand(std::string cmd, bool reliable);
+
+	bool operator==(const RCONCommand& other) const { return m_Command == other.m_Command; }
+
+	std::string m_Command;
+	bool m_Reliable = true;
+	std::promise<std::string> m_Promise;
+	std::shared_future<std::string> m_Future{ m_Promise.get_future().share() };
+};
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN 1
@@ -28,7 +64,9 @@ struct async_client::ThreadLangData
 };
 #endif
 
-async_client::async_client()
+async_client::async_client() :
+	m_ClientThreadData(std::make_shared<ClientThreadData>()),
+	m_ClientThread(&ClientThreadFunc, m_ClientThreadData)
 {
 }
 
@@ -174,4 +212,14 @@ bool async_client::is_logging_tx() const
 bool async_client::is_logging_rx() const
 {
 	return m_ClientThreadData->m_Client.is_logging_rx();
+}
+
+void async_client::set_min_delay(const std::chrono::steady_clock::duration& duration)
+{
+	m_ClientThreadData->m_MinDelay = duration;
+}
+
+std::chrono::steady_clock::duration async_client::get_min_delay() const
+{
+	return m_ClientThreadData->m_MinDelay;
 }
