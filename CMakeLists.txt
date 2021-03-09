@@ -12,9 +12,18 @@ add_library(SourceRCON STATIC
 	"src/srcon.cpp"
 )
 
-set_property(TARGET SourceRCON PROPERTY CXX_STANDARD 17)
+target_include_directories(SourceRCON PUBLIC "include")
 
-target_include_directories(SourceRCON PUBLIC include)
+target_compile_features(SourceRCON PUBLIC cxx_std_17)
+
+if (NOT TARGET mh::stuff)
+	find_package(mh-stuff CONFIG REQUIRED)
+endif()
+
+target_link_libraries(SourceRCON
+	PRIVATE
+		mh::stuff
+)
 
 if (WIN32)
 	target_link_libraries(SourceRCON PRIVATE ws2_32)

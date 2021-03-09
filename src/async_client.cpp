@@ -1,6 +1,8 @@
 #include "srcon/async_client.h"
 #include "srcon_internal.h"
 
+#include <mh/concurrency/locked_value.hpp>
+
 #include <cassert>
 #include <condition_variable>
 #include <iomanip>
@@ -22,8 +24,7 @@ struct async_client::ClientThreadData
 	mutable std::mutex m_CommandsMutex;
 	std::condition_variable m_CommandsCV;
 
-	srcon_addr m_Address;
-	mutable std::mutex m_AddressMutex;
+	mh::locked_value<srcon_addr> m_Address;
 
 	std::chrono::steady_clock::duration m_MinDelay = std::chrono::milliseconds(150);
 
@@ -77,13 +78,11 @@ async_client::~async_client()
 
 srcon_addr async_client::get_addr() const
 {
-	std::lock_guard lock(m_ClientThreadData->m_AddressMutex);
 	return m_ClientThreadData->m_Address;
 }
 
 void async_client::set_addr(srcon_addr addr)
 {
-	std::lock_guard lock(m_ClientThreadData->m_AddressMutex);
 	m_ClientThreadData->m_Address = std::move(addr);
 }
 
@@ -94,7 +93,6 @@ std::string async_client::ClientThreadData::send_command(const std::string_view&
 	if (!m_Client.is_connected())
 	{
 		SRCON_LOG("client not connected, reconnecting for command " << std::quoted(command));
-		std::lock_guard lock2(m_AddressMutex);
 		m_Client.connect(m_Address);
 	}
 
