@@ -33,6 +33,8 @@ jobs:
         arch: ${{ matrix.buildArch }}
 
     - name: run-cmake
+      env:
+        CXXFLAGS: /WX
       run: |
         mkdir cmake_out
         cd cmake_out
@@ -85,7 +87,7 @@ jobs:
       env:
         CXX: ${{ matrix.buildCompiler.exe }}
         CMAKE_CXX_COMPILER: ${{ matrix.buildCompiler.exe }}
-        CXXFLAGS: -Wall -Wpedantic -Wextra
+        CXXFLAGS: -Wall -Wpedantic -Wextra -Werror
       run: |
         mkdir cmake_out
         cd cmake_out
