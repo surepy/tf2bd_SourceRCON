@@ -33,8 +33,6 @@ jobs:
         arch: ${{ matrix.buildArch }}
 
     - name: run-cmake
-      env:
-        CXXFLAGS: /WX
       run: |
         mkdir cmake_out
         cd cmake_out
