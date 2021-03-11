@@ -1,7 +1,0 @@
-{
-	"name": "source-rcon",
-	"version-string": "2.0",
-	"dependencies": [
-		"mh-stuff"
-	]
-}

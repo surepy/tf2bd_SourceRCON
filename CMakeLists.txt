@@ -17,7 +17,13 @@ target_include_directories(SourceRCON PUBLIC "include")
 target_compile_features(SourceRCON PUBLIC cxx_std_17)
 
 if (NOT TARGET mh::stuff)
-	find_package(mh-stuff CONFIG REQUIRED)
+	include(FetchContent)
+	FetchContent_Declare(
+		mh_stuff
+		GIT_REPOSITORY https://github.com/PazerOP/stuff.git
+	)
+	FetchContent_MakeAvailable(mh_stuff)
+	# add_subdirectory(submodules/mh-stuff)
 endif()
 
 target_link_libraries(SourceRCON
