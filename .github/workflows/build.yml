@@ -96,38 +96,3 @@ jobs:
           ../
 
         cmake --build .
-
-
-  build-macos:
-    runs-on: macos-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        buildType: ["Debug", "Release"]
-
-    steps:
-    - uses: actions/checkout@v2
-
-    - name: Setup NuGet Credentials
-      run: >
-        nuget sources add
-        -source "https://nuget.pkg.github.com/${{ github.repository_owner }}/index.json"
-        -storepasswordincleartext
-        -name "GitHub"
-        -username "${{ github.repository_owner }}"
-        -password "${{ secrets.GITHUB_TOKEN }}"
-    - uses: seanmiddleditch/gha-setup-ninja@v3
-
-    - name: run-cmake
-      env:
-        CXXFLAGS: -Wall -Wpedantic -Wextra
-      run: |
-        mkdir cmake_out
-        cd cmake_out
-
-        cmake -G Ninja \
-          -DSourceRCON_WARNINGS_AS_ERRORS=ON \
-          -DCMAKE_BUILD_TYPE=${{ matrix.buildType }} \
-          ../
-
-        cmake --build .
