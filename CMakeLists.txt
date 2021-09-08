@@ -2,7 +2,7 @@ cmake_minimum_required(VERSION 3.10)
 
 project(SourceRCON)
 
-add_library(SourceRCON STATIC
+add_library(SourceRCON
 	"include/srcon/client.h"
 	"src/client.cpp"
 	"include/srcon/async_client.h"
