@@ -1,0 +1,10 @@
+{
+	"name": "source-rcon",
+	"version-date": "2021-09-09",
+	"description": "C++ Source RCON implementation ",
+	"homepage": "https://github.com/PazerOP/SourceRCON",
+	"dependencies": [
+		"mh-cmake-common",
+		"mh-stuff"
+	]
+}

@@ -1,8 +1,12 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(SourceRCON)
+project(SourceRCON
+	VERSION 1.0
+	DESCRIPTION "C++ Source RCON implementation "
+	HOMEPAGE_URL "https://github.com/PazerOP/SourceRCON"
+)
 
-add_library(SourceRCON
+add_library(SourceRCON STATIC
 	"include/srcon/client.h"
 	"src/client.cpp"
 	"include/srcon/async_client.h"
@@ -12,23 +16,18 @@ add_library(SourceRCON
 	"src/srcon.cpp"
 )
 
-target_include_directories(SourceRCON PUBLIC "include")
+target_include_directories(SourceRCON
+	PUBLIC
+		"$<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>"
+		"$<INSTALL_INTERFACE:include>"
+)
 
 target_compile_features(SourceRCON PUBLIC cxx_std_17)
 
-if (NOT TARGET mh::stuff)
-	include(FetchContent)
-	FetchContent_Declare(
-		mh_stuff
-		GIT_REPOSITORY https://github.com/PazerOP/stuff.git
-	)
-	FetchContent_MakeAvailable(mh_stuff)
-	# add_subdirectory(submodules/mh-stuff)
-endif()
-
+find_package(mh-stuff CONFIG REQUIRED)
 target_link_libraries(SourceRCON
 	PRIVATE
-		mh::stuff
+		mh::mh-stuff
 )
 
 if (WIN32)
@@ -43,3 +42,9 @@ if (SourceRCON_WARNINGS_AS_ERRORS)
 		target_compile_options(SourceRCON PRIVATE -Werror)
 	endif()
 endif()
+
+find_package(mh-cmake-common CONFIG REQUIRED)
+mh_basic_install(
+	PROJ_INCLUDE_DIRS
+		"include/"
+)
