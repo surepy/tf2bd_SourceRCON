@@ -1,6 +1,6 @@
 cmake_minimum_required(VERSION 3.10)
 
-project(source-rcon
+project(mh-source-rcon
 	VERSION 1.0
 	DESCRIPTION "C++ Source RCON implementation "
 	HOMEPAGE_URL "https://github.com/PazerOP/SourceRCON"
