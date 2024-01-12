@@ -73,6 +73,11 @@ async_client::async_client() :
 
 async_client::~async_client()
 {
+	// disconnect from server
+	if (m_ClientThreadData) {
+		m_ClientThreadData.get()->m_Client.disconnect();
+	}
+
 	m_ClientThread.detach();
 }
 
@@ -154,7 +159,7 @@ void async_client::ClientThreadFunc(std::shared_ptr<ClientThreadData> data)
 					SRCON_LOG("Sending a command that is " << cmd->m_Command.size() << " chars long, was this really intended?");
 
 				auto resultStr = data->send_command(cmd->m_Command);
-				//DebugLog("Setting promise for "s << std::quoted(cmd->m_Command) << " to " << std::quoted(resultStr));
+				// SRCON_LOG("Setting promise for " << std::quoted(cmd->m_Command) << " to " << std::quoted(resultStr));
 				cmd->m_Promise.set_value(resultStr);
 
 				if (cmd->m_Reliable)

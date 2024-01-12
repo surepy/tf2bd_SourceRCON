@@ -384,8 +384,14 @@ static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout) try
 	FD_SET(s, &writeSet);
 	{
 		const auto result = select(int(s + 1), nullptr, &writeSet, nullptr, &timeoutVal);
-		if (result == SOCKET_ERROR)
+		if (result == SOCKET_ERROR) {
+			// close our socket before throwing, because nobody else will clean it up if we don't.
+			if (s != INVALID_SOCKET) {
+				closesocket(s);
+			}
+
 			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): select()");
+		}
 	}
 
 	if (FD_ISSET(s, &writeSet))
@@ -395,6 +401,12 @@ static void WaitForSocketConnection(SOCKET s, srcon::timeout_t timeout) try
 		int error;
 		socklen_t errorSize = sizeof(error);
 		const auto result = getsockopt(s, SOL_SOCKET, SO_ERROR, reinterpret_cast<char*>(&error), &errorSize);
+
+		// close our socket before throwing, because nobody else will clean it up if we don't.
+		if (s != INVALID_SOCKET) {
+			closesocket(s);
+		}
+
 		if (result == SOCKET_ERROR)
 			throw srcon_error(srcon_errc::rcon_connect_failed, GetSocketError(), "WaitForSocketConnection(): getsockopt()");
 
@@ -449,8 +461,15 @@ srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t tim
 		{
 			auto error = GetSocketError();
 			const auto msg = error.message();
-			if (error != SRCON_EWOULDBLOCK)
+
+			if (error != SRCON_EWOULDBLOCK) {
+				if (m_Socket != INVALID_SOCKET) {
+					SRCON_LOG("Closing Socket (" << m_Socket << ")");
+					closesocket(m_Socket);
+				}
+
 				throw srcon_error(srcon_errc::rcon_connect_failed, error, "connect()");
+			}
 		}
 	}
 	SetNonBlocking(m_Socket, false);
@@ -464,8 +483,14 @@ srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t tim
 		if (response.m_Type != ResponsePacketType::SERVERDATA_AUTH_RESPONSE)
 			continue;
 
-		if (response.m_ID == -1)
+		if (response.m_ID == -1) {
+			if (m_Socket != INVALID_SOCKET) {
+				SRCON_LOG("Closing Socket (" << m_Socket << ")");
+				closesocket(m_Socket);
+			}
+
 			throw srcon_error(srcon_errc::bad_rcon_password);
+		}
 	}
 
 	SRCON_LOG("Connection established!");
@@ -482,6 +507,7 @@ void srcon::client::connect(srcon_addr addr, timeout_t timeout) try
 
 	m_Address = std::move(addr);
 	m_Timeout = std::move(timeout);
+	// note: if you don't clean up after SocketData() constructor throws, you have created a socket leak!
 	m_Socket = SocketDataPtr(new SocketData(m_Address, m_Timeout, m_LogSettings));
 }
 catch (const std::exception& e)
@@ -515,6 +541,14 @@ catch (const std::exception& e)
 
 void srcon::client::disconnect()
 {
+	if (m_Socket) {
+		SRCON_LOG("Disconnecting Socket (" << m_Socket.get()->m_Socket << ")");
+	}
+	else {
+
+		SRCON_LOG("Disconnect called on a null socket.");
+	}
+
 	m_Socket.reset();
 }
 
