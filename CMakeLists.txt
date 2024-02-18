@@ -12,6 +12,8 @@ add_library(SourceRCON STATIC
 	"src/srcon.cpp"
 )
 
+set_target_properties(SourceRCON PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 target_include_directories(SourceRCON PUBLIC "include")
 
 target_compile_features(SourceRCON PUBLIC cxx_std_17)
