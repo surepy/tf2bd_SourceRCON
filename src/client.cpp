@@ -462,7 +462,7 @@ srcon::client::SocketData::SocketData(const srcon_addr addr, const timeout_t tim
 			auto error = GetSocketError();
 			const auto msg = error.message();
 
-			if (error != SRCON_EWOULDBLOCK) {
+			if (error != SRCON_EWOULDBLOCK && error != SRCON_EINPROGRESS ) {
 				if (m_Socket != INVALID_SOCKET) {
 					SRCON_LOG("Closing Socket (" << m_Socket << ")");
 					closesocket(m_Socket);
