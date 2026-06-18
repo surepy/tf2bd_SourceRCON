@@ -95,11 +95,11 @@ void async_client::set_addr(srcon_addr addr)
 std::string async_client::ClientThreadData::send_command(const std::string_view& command) try
 {
 	std::lock_guard client_lock(m_ClientMutex);
-	std::lock_guard addr_lock(m_AddressMutex);
 
 	if (!m_Client.is_connected())
 	{
 		SRCON_LOG("client not connected, reconnecting for command " << std::quoted(command));
+		std::lock_guard addr_lock(m_AddressMutex);
 		m_Client.connect(m_Address);
 	}
 
