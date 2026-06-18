@@ -7,6 +7,7 @@
 #include <mutex>
 #include <optional>
 #include <queue>
+#include <thread>
 
 using namespace srcon;
 using namespace std::chrono_literals;
